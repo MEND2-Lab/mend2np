@@ -88,5 +88,5 @@ params = {
     }
 }
 
-pgng.main(params=params,formatted=False)
+pgng.main(params=params,formatted=False,out="out")
 
