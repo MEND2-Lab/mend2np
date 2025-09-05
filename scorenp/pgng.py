@@ -13,30 +13,38 @@ def main(params:dict,formatted:bool=False,out:str=os.getcwd()):
 
     os.makedirs(out, exist_ok=True)
 
+    global error_log
+
     # temporary error log, add proper logging later
     error_log = os.path.join(out,'error_log.csv')
     if os.path.exists(error_log):
         os.remove(error_log)
 
     for filepath in utils.select_files():
-        #idx,dt,basename = utils.parse_files(filepath)
+        print(filepath)
+        filename_id = utils.parse_files(filepath)
         filename = os.path.basename(filepath)
 
         try:
             df = pd.read_csv(filepath)
             fmtdf = format(df,params)
             efmtdf = events(fmtdf)
+            efmtdf.insert(1,'filename_id',filename_id)
+            write_out(df=efmtdf,out=out,type='tsv')
             cov(efmtdf,out)
         except Exception as e:
             with open(error_log, 'a') as f:
                 f.write(f'{filename} : {e}\n{traceback.format_exc()}\n')
             continue
 
-        # fmtdf = format(df,params)
-        # efmtdf = events(fmtdf)
-        # cov(efmtdf,out)
+def write_out(df:pd.DataFrame,out:str,type:str,tag:str=''):
 
-        efmtdf.to_csv(os.path.join(out,f"{efmtdf['id'].values[0]}_{efmtdf['session'].values[0]}_PGNG_{efmtdf['datetime'].values[0]}.tsv"),index=False,sep='\t')
+    if type == 'csv':
+        sep = ','
+    elif type == 'tsv':
+        sep = '\t'
+
+    df.to_csv(os.path.join(out,f"{df['filename_id'].values[0]}_{df['session'].values[0]}_PGNG{tag}_{df['datetime'].values[0]}.{type}"),index=False,sep=sep)
 
 def format(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     '''
@@ -47,28 +55,35 @@ def format(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     for block in params['blocks']:
 
         tmpdf = pd.DataFrame()
-        
-        mask = np.invert(df[params['blocks'][block]['cols']['trial']].isna())
 
-        for metacol in params['metacols']:
-            if params['metacols'][metacol]:
-                tmpdf[metacol] = df.loc[mask,params['metacols'][metacol]]
-        
-        for col in params['blocks'][block]['cols']:
-            if params['blocks'][block]['cols'][col]:
-                tmpdf[col] = df.loc[mask,params['blocks'][block]['cols'][col]]
-        
-        for metavar in params['blocks'][block]['metavars']:
-            if params['blocks'][block]['metavars'][metavar]:
-                if metavar == 'stim_targ_names':
-                    tmpdf[metavar] = [params['blocks'][block]['metavars'][metavar]] * len(tmpdf)
-                else:
-                    tmpdf[metavar] = params['blocks'][block]['metavars'][metavar]
+        try:
+            mask = np.invert(df[params['blocks'][block]['cols']['trial']].isna())
 
-        if params['metacols']['exp_start']:
-            tmpdf['exp_start'] = df[params['metacols']['exp_start']].dropna().values[0]
+            for metacol in params['metacols']:
+                if params['metacols'][metacol]:
+                    tmpdf[metacol] = df.loc[mask,params['metacols'][metacol]]
+            
+            for col in params['blocks'][block]['cols']:
+                if params['blocks'][block]['cols'][col]:
+                    tmpdf[col] = df.loc[mask,params['blocks'][block]['cols'][col]]
+            
+            for metavar in params['blocks'][block]['metavars']:
+                if params['blocks'][block]['metavars'][metavar]:
+                    if metavar == 'stim_targ_names':
+                        tmpdf[metavar] = [params['blocks'][block]['metavars'][metavar]] * len(tmpdf)
+                    else:
+                        tmpdf[metavar] = params['blocks'][block]['metavars'][metavar]
 
-        tmpdf['block'] = block
+            if params['metacols']['exp_start']:
+                tmpdf['exp_start'] = df[params['metacols']['exp_start']].dropna().values[0]
+
+            tmpdf['block'] = block
+
+        except Exception as e:
+            with open(error_log, 'a') as f:
+                f.write(f"{tmpdf['id'].values[0]} : {e}\n{traceback.format_exc()}\n")
+            continue
+
 
         fmtdf = pd.concat([fmtdf,tmpdf],ignore_index=True)
 
@@ -226,23 +241,26 @@ def cov(df:pd.DataFrame,out:str):
 
         global_window = df_filtered['rt_adj'].values
 
-        df_cov = pd.DataFrame({'id':df_filtered['id'].head(1).values[0],
-                            'session':df_filtered['session'].head(1).values[0],
-                            'datetime':df_filtered['datetime'].head(1).values[0],
-                            'block':np.nan,
-                            'type':'',
-                            'resp_class':'',
-                            'window_start':window_start,
-                            'window_end':last_onset,
-                            'rt_count':len(global_window),
-                            'rt_mean':np.mean(global_window),
-                            'rt_sd':np.std(global_window),
-                            'rt_cov':np.std(global_window)/np.mean(global_window)},
-                                index=[0])
+        df_cov = pd.DataFrame({
+            'filename_id':df_filtered['filename_id'].head(1).values[0],
+            'id':df_filtered['id'].head(1).values[0],
+            'session':df_filtered['session'].head(1).values[0],
+            'datetime':df_filtered['datetime'].head(1).values[0],
+            'block':np.nan,
+            'type':'',
+            'resp_class':'',
+            'window_start':window_start,
+            'window_end':last_onset,
+            'rt_count':len(global_window),
+            'rt_mean':np.mean(global_window),
+            'rt_sd':np.std(global_window),
+            'rt_cov':np.std(global_window)/np.mean(global_window)},
+            index=[0])
         
         df_cov_blocks = df_filtered.set_index('block').groupby('block',as_index=False).apply(lambda x: cov_group(x,window_increment,rt_count))
         df_cov = pd.concat([df_cov,df_cov_blocks])
-        df_cov.to_csv(os.path.join(out,f"{df['id'].head(1).values[0]}_{df['session'].head(1).values[0]}_COV_{resp_class_str}_{df['datetime'].head(1).values[0]}.csv"),index=False)
+        write_out(df=df_cov,out=out,type='csv',tag=f'_COV_{resp_class_str}')
+        #df_cov.to_csv(os.path.join(out,f"{df['filename_id'].head(1).values[0]}_{df['session'].head(1).values[0]}_PGNG_COV_{resp_class_str}_{df['datetime'].head(1).values[0]}.csv"),index=False)
 
 def cov_group(df:pd.DataFrame,cov_window_increment:float,cov_rt_count:int) -> pd.DataFrame:
 
@@ -273,7 +291,7 @@ def cov_group(df:pd.DataFrame,cov_window_increment:float,cov_rt_count:int) -> pd
 
         window_start += cov_window_increment
 
-    for var in ['resp_class','type','block','datetime','session','id']:
+    for var in ['resp_class','type','block','datetime','session','filename_id','id']:
         df_cov.insert(loc=0, column=var, value=df[var].head(1).values[0])
 
     return df_cov

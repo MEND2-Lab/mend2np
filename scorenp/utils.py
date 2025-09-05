@@ -58,11 +58,11 @@ def parse_files(filepath:str) -> tuple:
     date_str = parts[-2] + '_' + parts[-1]
     for fmt in ["%Y-%m-%d_%Hh%M.%S.%f","%m-%d-%Y_%Hh%M.%S.%f"]:
         try:
-            #dt = datetime.strptime(date_str,"%Y-%m-%d_%Hh%M.%S.%f")
             dt = datetime.strptime(date_str,fmt)
             break
         except ValueError:
             pass
-    id = re.match(r'^\d+',basename).group(0)
+    id = re.match(r'^[^_]+',basename).group(0)
 
-    return (id,dt,basename)
+    #return (id,dt,basename)
+    return (id)
