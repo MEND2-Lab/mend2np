@@ -1,5 +1,6 @@
 import os
 import re
+import math
 from datetime import datetime
 from tkinter import filedialog as fd
 
@@ -66,3 +67,31 @@ def parse_files(filepath:str) -> tuple:
 
     #return (id,dt,basename)
     return (id)
+
+def find_gcd_of_multiple(numbers):
+    """Calculates the GCD of a list of numbers."""
+    if not numbers:
+        return 0
+    result = numbers[0]
+    for i in range(1, len(numbers)):
+        result = math.gcd(result, numbers[i])
+    return result
+
+def find_divisors(n):
+    """Finds all divisors of a given number."""
+    divisors = []
+    for i in range(1, int(n**0.5) + 1):
+        if n % i == 0:
+            divisors.append(i)
+            if i * i != n:  # Avoid adding the square root twice if it's a perfect square
+                divisors.append(n // i)
+    divisors.sort()
+    return divisors
+
+def find_common_divisors(numbers):
+    """Finds all common divisors of a list of numbers."""
+    if not numbers:
+        return []
+    
+    common_gcd = find_gcd_of_multiple(numbers)
+    return find_divisors(common_gcd)

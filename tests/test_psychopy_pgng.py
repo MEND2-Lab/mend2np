@@ -88,5 +88,4 @@ params = {
     }
 }
 
-pgng.main(params=params,formatted=False,out="out")
-
+pgng.main(params=params,formatted=False,cov=True,out="out",filelist="filepaths.txt")
