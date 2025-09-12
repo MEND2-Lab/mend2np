@@ -8,71 +8,195 @@ import numpy as np
 import traceback
 import sys
 import math
+from collections.abc import Iterable
+from pandas.api.types import is_numeric_dtype
 
-def main(params:dict,formatted:bool=False,score:bool=True,cov:bool=False,out:str=os.getcwd(),filelist:str=''):
+def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out:str=os.getcwd(),filelist:str|list=''):
     '''
     '''
 
+    # make output directory
     os.makedirs(out, exist_ok=True)
 
-    global error_log
+    # initiate logger
+    global logger
+    logger = utils.setup_logger(name='root',out=out)
+    logger.info("start")
 
     # temporary error log, add proper logging later
-    error_log = os.path.join(out,'error_log.csv')
-    if os.path.exists(error_log):
-        os.remove(error_log)
-
+    # global error_log
+    # error_log = os.path.join(out,'error_log.csv')
+    # if os.path.exists(error_log):
+    #     os.remove(error_log)
+    
+    # sort how the file list was passed
     if filelist:
-        try:
-            filepaths = [line.strip() for line in open(filelist, 'r', encoding='utf-8')]
-        except Exception as e:
-            print(f'problem reading file list: {filelist}: {e}')
+        if isinstance(filelist,Iterable):
+            # if filelist is iterable
+            filepaths = filelist
+        elif os.path.isfile(filelist):
+            # else if a file, try reading filepaths
+            try:
+                filepaths = [line.strip() for line in open(filelist, 'r', encoding='utf-8')]
+            except Exception as e:
+                logger.critical(f'problem reading filelist: {filelist}: {e}\n{traceback.format_exc()}\n')
+                #print(f'problem reading file list: {filelist}: {e}')
+                sys.exit(1)
+        else:
+            logger.critical(f'problem with filelist: {filelist}, consult docs or leave blank to use GUI file select')
+            #print('problem with filelist, consult docs or leave blank to use GUI file select')
             sys.exit(1)
     else:
+        # else do the GUI file select
         filepaths = utils.select_files()
 
+    # initiate combined files
     if score:
         combined_scores = pd.DataFrame()
-    if cov:
-        window = 60
+    if not np.isnan(cov_window):
         combined_cov = pd.DataFrame()
 
+    # loop through data files
     for filepath in filepaths:
-        print(filepath)
-        filename_id = utils.parse_files(filepath)
-        filename = os.path.basename(filepath)
+        #print(filepath)
+        logger.info(f'processing: {filepath}')
 
+        # putting everything in a try block & write errors to error_log
         try:
+            filename_id = utils.parse_files(filepath)
+            filename = os.path.basename(filepath)
+            
+            # read data
             df = pd.read_csv(filepath)
-            fmtdf = format_df(df,params)
-            efmtdf = events_df(fmtdf)
-            efmtdf.insert(1,'filename_id',filename_id)
-            write_out(df=efmtdf,out=out,type='tsv')
+
+            # if the data aren't already formatted properly
+            if not formatted:
+                df = format_df(df,params)
+
+            if not check_cols(df):
+                logger.critical('columns misspecified')
+                sys.exit(1)
+
+            # add event columns
+            edf = events_df(df)
+            # add onset columns
+            oedf = onsets(edf)
+            oedf.insert(1,'filename_id',filename_id)
+            write_out(oedf,out,False,'tsv')
+
+            #TODO write formatted onsets file
 
             # make some score output
             if score:
-                combined_scores = pd.concat([combined_scores,score_df(efmtdf)],axis=0,ignore_index=True)
-            if cov:
-                combined_cov = pd.concat([combined_cov,cov_df(efmtdf,window_duration=window)],axis=0,ignore_index=True)
+                combined_scores = pd.concat([combined_scores,score_df(oedf)],axis=0,ignore_index=True)
+            if not np.isnan(cov_window):
+                combined_cov = pd.concat([combined_cov,cov_df(oedf,window_duration=cov_window)],axis=0,ignore_index=True)
 
         except Exception as e:
-            with open(error_log, 'a') as f:
-                f.write(f'{filename} : {e}\n{traceback.format_exc()}\n')
+            logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
+            # with open(error_log, 'a') as f:
+            #     f.write(f'{filename} : {e}\n{traceback.format_exc()}\n')
             continue
     
-    if score:
-        combined_scores.to_csv(os.path.join(out,f"scores_{combined_scores['exp_name'].head(1).values[0]}_n{len(combined_scores)}.csv"),index=False)
-    if cov:
-        combined_cov.to_csv(os.path.join(out,f"cov_{combined_cov['exp_name'].head(1).values[0]}_{window}s_n{combined_cov['filename_id'].nunique()}.csv"),index=False)
+    if score and not combined_scores.empty:
+        write_out(combined_scores,out,True,'csv','scores')
+        #combined_scores.to_csv(os.path.join(out,f"scores_{combined_scores['exp_name'].head(1).values[0]}_n{len(combined_scores)}.csv"),index=False)
+    if not np.isnan(cov_window) and not combined_cov.empty:
+        write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
+        #combined_cov.to_csv(os.path.join(out,f"cov_{combined_cov['exp_name'].head(1).values[0]}_{cov_window}s_n{combined_cov['filename_id'].nunique()}.csv"),index=False)
+    
+    logger.info('end')
 
-def write_out(df:pd.DataFrame,out:str,type:str,tag:str=''):
+def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str=''):
 
-    if type == 'csv':
+    if filetype == 'csv':
         sep = ','
-    elif type == 'tsv':
+    elif filetype == 'tsv':
         sep = '\t'
 
-    df.to_csv(os.path.join(out,f"{df['filename_id'].values[0]}_{df['session'].values[0]}_PGNG{tag}_{df['datetime'].values[0]}.{type}"),index=False,sep=sep)
+    if merged:
+        if 'exp_name' in df.columns:
+            exp_name = df['exp_name'].head(1).values[0]
+        else:
+            exp_name = 'PGNG'
+        filename = f"{exp_name}_n{df['id'].nunique()}_{tag}.{filetype}"
+        df.to_csv(os.path.join(out,filename),index=False,sep=sep)
+
+    else:
+        filename = ''
+        for var in ['filename_id','id','session','exp_name','datetime']:
+            if var in df.columns:
+                if not filename:
+                    filename =  ''.join([filename,str(df[var].head(1).values[0])])
+                else:
+                    filename = '_'.join([filename,str(df[var].head(1).values[0])])
+        filename = filename + f'.{filetype}'
+        df.to_csv(os.path.join(out,filename),index=False,sep=sep)
+
+    #df.to_csv(os.path.join(out,f"{df['filename_id'].values[0]}_{df['session'].values[0]}_PGNG{tag}_{df['datetime'].values[0]}.{type}"),index=False,sep=sep)
+
+def check_cols(df:pd.DataFrame) -> bool:
+    '''
+    required: id, stimuli, response, rt, block, stim_targ_names, resp_key, type
+    '''
+
+    all_good = True
+
+    # check exist & not empty
+    for var in ['id','stimuli','response','rt','block','stim_targ_names','resp_key','type']:
+        if var not in df.columns:
+            all_good = False
+            logger.warn(f'required scoring column {var} not in dataset')
+            continue
+        elif not df[var].notnull().any():
+            all_good = False
+            logger.warn(f'required scoring column {var} is empty')
+            continue
+
+    # additional checks
+    if not is_numeric_dtype(df['rt']):
+        all_good = False
+        logger.warn(f'column "rt" is not numeric')
+    
+    if df['response'].dtype != df['resp_key'].dtype:
+        all_good = False
+        logger.warn(f'columns "response" and "resp_key" are not the same data type')
+
+    if not isinstance(df['stim_targ_names'].head(1).values[0],Iterable):
+        all_good = False
+        logger.warn(f'column "stim_targ_names" does not contain lists of target names')
+
+    for s in df['type'].unique():
+        if s not in ['go','gng','gs']:
+            all_good = False
+            logger.warn('values in the column "type" need to be one of ["go","gng","gs"]')
+    
+    return all_good
+        
+
+def check_timging_cols(df:pd.DataFrame) -> bool:
+    '''
+    addtional required for timing: exp_start, stim_start, stim_dur
+    '''
+
+    # TODO: make it possible to use stim_start OR stim_dur
+
+    all_good = True
+
+    for var in ['exp_start','stim_start','stim_dur']:
+        if var not in df.columns:
+            all_good = False
+            logger.warn(f'column {var} not in dataset, will proceed without timing calcs')
+            continue
+        elif not df[var].notnull().any():
+            all_good = False
+            logger.warn(f'column {var} is empty, will proceed without timing calcs')
+            continue
+        if not is_numeric_dtype(df[var]):
+            all_good = False
+            logger.warn(f'column {var} is not numeric, will proceed without timing calcs')
+        
+    return all_good
 
 def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     '''
@@ -108,8 +232,9 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
             tmpdf['block'] = block
 
         except Exception as e:
-            with open(error_log, 'a') as f:
-                f.write(f"{tmpdf['id'].values[0]} : {e}\n{traceback.format_exc()}\n")
+            logger.error(f"{tmpdf['id'].values[0]} : {e}\n{traceback.format_exc()}\n")
+            #with open(error_log, 'a') as f:
+                #f.write(f"{tmpdf['id'].values[0]} : {e}\n{traceback.format_exc()}\n")
             continue
 
 
@@ -125,11 +250,12 @@ def events_df(df:pd.DataFrame) -> pd.DataFrame:
     '''
 
     dfl = df.set_index('block').groupby(level='block',as_index=False).apply(event_block).reset_index(drop=True)
-    dflt = onsets(dfl)
-    dflt.insert(dflt.columns.get_loc('trial'),'block',dflt.pop('block'))
+    dfl.insert(dfl.columns.get_loc('trial'),'block',dfl.pop('block'))
+    #dflt = onsets(dfl)
+    #dflt.insert(dflt.columns.get_loc('trial'),'block',dflt.pop('block'))
     #dflt.drop(columns=dflt.filter(regex='level_.*',axis=1).columns.to_list(),axis=1,inplace=True)
 
-    return dflt
+    return dfl
 
 def event_block(block:pd.DataFrame) -> pd.DataFrame:
     '''

@@ -1,11 +1,6 @@
 '''
 
-required minimum format:
-block_type_col
-stimuli_col
-response_col
 
-data will be scored grouped by block number
 
 '''
 
@@ -15,29 +10,29 @@ from scorenp import pgng
 # params structure if data is unformatted:
 params = {
     'metacols':{
-        'id':'participant',
+        'id':'participant',  # required
         'session':'session',
         'datetime':'date',
         'exp_name':'expName',
         'software_version':'psychopyVersion',
         'framerate':'frameRate',
-        'exp_start':'expStart'
+        'exp_start':'expStart'  # required for timing
     },
     'blocks':{
         '1':{
             'metavars':{
-                'stim_targ_names':['L_s.bmp','L_r.bmp'],
-                'resp_key':'n',
-                'stim_dur':0.75,
-                'type':'go'
+                'stim_targ_names':['L_s.bmp','L_r.bmp'],  # required
+                'resp_key':'n',  # required
+                'stim_dur':0.75,  # required for timing
+                'type':'go'  # required
                 #'stop':'Stop.bmp'
             },
             'cols':{
-                'stimuli':'stimuli_1',
-                'stim_start':'block1_stim.started',
-                'response':'block1_resp.keys',
-                'rt':'block1_resp.rt',
-                'trial':'PGNGS_B1.thisTrialN'
+                'stimuli':'stimuli_1',  # required
+                'stim_start':'block1_stim.started',  # required for timing
+                'response':'block1_resp.keys',  # required
+                'rt':'block1_resp.rt',  # required
+                'trial':'PGNGS_B1.thisTrialN'  # required
             }
         },
         '2':{
@@ -88,4 +83,6 @@ params = {
     }
 }
 
-pgng.main(params=params,formatted=False,cov=True,out="out",filelist="filepaths.txt")
+#pgng.main(params=params,formatted=False,out="out",filelist=['tests/example_data/example_data_psychopy_pgng_1.csv'])
+
+pgng.pgng(params=params,formatted=False,out="out",cov_window=50)
