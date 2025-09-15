@@ -1,0 +1,112 @@
+'''
+
+'''
+
+from context import scorenp
+from scorenp import pgng
+
+# params structure if data is unformatted:
+params = {
+    'metacols':{
+        'id':'participant',
+        'session':'session',
+        'datetime':'date',
+        'exp_name':'expName',
+        'software_version':'psychopyVersion',
+        'framerate':'frameRate'
+    },
+    'blocks':{
+        '1':{
+            'metavars':{
+                'stim_targ_names':['L_circle.bmp','L_diamond.bmp'],
+                'resp_key':'n',
+                'stim_dur':0.6, 
+                'type':'go'
+            },
+            'cols':{
+                'stimuli':'stimuli_1',
+                'response':'block1_resp.keys',
+                'rt':'block1_resp.rt',
+                'trial':'PGNGS_B1.thisTrialN'
+            }
+        },
+        '2':{
+            'metavars':{
+                'stim_targ_names':['L_circle.bmp','L_diamond.bmp'],
+                'resp_key':'n',
+                'stim_dur':0.6,
+                'type':'gng'
+            },
+            'cols':{
+                'stimuli':'stimuli_2',
+                'response':'block2_resp.keys',
+                'rt':'block2_resp.rt',
+                'trial':'PGNGS_B2.thisTrialN'
+            }
+        },
+        '3':{
+            'metavars':{
+                'stim_targ_names':['L_circle.bmp','L_diamond.bmp'],
+                'resp_key':'n',
+                'stim_dur':0.6,
+                'type':'gs',
+                'stop':'Stop.bmp'
+            },
+            'cols':{
+                'stimuli':'stimuli_3',
+                'response':'block3_resp.keys',
+                'rt':'block3_resp.rt',
+                'trial':'PGNGS_B3.thisTrialN',
+                'stop_time':'time_3'
+            }
+        },
+        '4':{
+            'metavars':{
+                'stim_targ_names':['L_circle.bmp','L_diamond.bmp','L_triangle.bmp'],
+                'resp_key':'n',
+                'stim_dur':0.6,
+                'type':'go'
+            },
+            'cols':{
+                'stimuli':'stimuli_4',
+                'response':'block4_resp.keys',
+                'rt':'block4_resp.rt',
+                'trial':'PGNGS_B4.thisTrialN'
+            }
+        },
+        '5':{
+            'metavars':{
+                'stim_targ_names':['L_circle.bmp','L_diamond.bmp','L_triangle.bmp'],
+                'resp_key':'n',
+                'stim_dur':0.6,
+                'type':'gng'
+            },
+            'cols':{
+                'stimuli':'stimuli_5',
+                'response':'block5_resp.keys',
+                'rt':'block5_resp.rt',
+                'trial':'PGNGS_B5.thisTrialN'
+            }
+        },
+        '6':{
+            'metavars':{
+                'stim_targ_names':['L_circle.bmp','L_diamond.bmp','L_triangle.bmp'],
+                'resp_key':'n',
+                'stim_dur':0.6,
+                'type':'gs',
+                'stop':'Stop.bmp'
+            },
+            'cols':{
+                'stimuli':'stimuli_6',
+                'response':'block6_resp.keys',
+                'rt':'block6_resp.rt',
+                'trial':'PGNGS_B6.thisTrialN',
+                'stop_time':'time_6'
+            }
+        }
+    }
+}
+
+#pgng.main(params=params,formatted=False,out="out",filelist=['tests/example_data/example_data_psychopy_pgng_2.csv'])
+
+pgng.pgng(params=params,formatted=False,out="out")

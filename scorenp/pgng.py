@@ -78,19 +78,25 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
                 sys.exit(1)
 
             # add event columns
-            edf = events_df(df)
+            df = events_df(df)
+            
+            # add adjusted rt column
+            df = rt_adj(df)
+
             # add onset columns
-            oedf = onsets(edf)
-            oedf.insert(1,'filename_id',filename_id)
-            write_out(oedf,out,False,'tsv')
+            if check_timging_cols(df):
+                df = onsets(df)
+
+            df.insert(1,'filename_id',filename_id)
+            write_out(df,out,False,'tsv')
 
             #TODO write formatted onsets file
 
             # make some score output
             if score:
-                combined_scores = pd.concat([combined_scores,score_df(oedf)],axis=0,ignore_index=True)
+                combined_scores = pd.concat([combined_scores,score_df(df)],axis=0,ignore_index=True)
             if not np.isnan(cov_window):
-                combined_cov = pd.concat([combined_cov,cov_df(oedf,window_duration=cov_window)],axis=0,ignore_index=True)
+                combined_cov = pd.concat([combined_cov,cov_df(df,window_duration=cov_window)],axis=0,ignore_index=True)
 
         except Exception as e:
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
@@ -226,8 +232,12 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
                     else:
                         tmpdf[metavar] = params['blocks'][block]['metavars'][metavar]
 
-            if params['metacols']['exp_start']:
+            if 'exp_start' in params['metacols']:
                 tmpdf['exp_start'] = df[params['metacols']['exp_start']].dropna().values[0]
+
+            # for gs, update stim_dur to correct times
+            if 'stop_time' in params['blocks'][block]['cols']:
+                tmpdf['stim_dur'] = df.loc[mask,params['blocks'][block]['cols']['stop_time']]
 
             tmpdf['block'] = block
 
@@ -249,13 +259,27 @@ def events_df(df:pd.DataFrame) -> pd.DataFrame:
     takes in a formatted dataset
     '''
 
-    dfl = df.set_index('block').groupby(level='block',as_index=False).apply(event_block).reset_index(drop=True)
-    dfl.insert(dfl.columns.get_loc('trial'),'block',dfl.pop('block'))
+    df = df.set_index('block').groupby(level='block',as_index=False).apply(event_block).reset_index(drop=True)
+    df.insert(df.columns.get_loc('trial'),'block',df.pop('block'))
     #dflt = onsets(dfl)
     #dflt.insert(dflt.columns.get_loc('trial'),'block',dflt.pop('block'))
     #dflt.drop(columns=dflt.filter(regex='level_.*',axis=1).columns.to_list(),axis=1,inplace=True)
 
-    return dfl
+    # for _, block in df.groupby('block'):
+    #     if block['type'].values[0] == 'go':
+    #         df['stim_class'] = block.apply(lambda x: 'target' if x['stimuli'] in x['stim_targ_names'] else '', axis=1)
+    #         df['resp_class'] = resp_go(block)
+    #     elif block['type'].values[0] == 'gng':
+    #         df['stim_class'] = stim_gng(block)
+    #         df['resp_class'] = resp_gng(block)
+    #         #df_scores = pd.concat([df_scores,score_gng(block).reset_index(drop=True)],axis=1)
+    #     elif block['type'].values[0] == 'gs':
+    #         df['stim_class'] = stim_gs(block)
+    #         df['resp_class'] = resp_gs(block)
+    #     else:
+    #         continue
+
+    return df
 
 def event_block(block:pd.DataFrame) -> pd.DataFrame:
     '''
@@ -266,19 +290,19 @@ def event_block(block:pd.DataFrame) -> pd.DataFrame:
     block['resp_class'] = ''
 
     if block['type'].values[0] == 'go':
-        block['stim_class'] = block.apply(lambda x: 'target' if x['stimuli'] in x['stim_targ_names'] \
-            else '', axis=1)
-        
+        block['stim_class'] = block.apply(lambda x: 'target' if x['stimuli'] in x['stim_targ_names'] else '', axis=1)
         block['resp_class'] = resp_go(block)
 
     elif block['type'].values[0] == 'gng':
         block['stim_class'] = stim_gng(block)
-
         block['resp_class'] = resp_gng(block)
     
-    # elif grp['type'].values[0] == 'gs':  # TODO: add stop var
-    #     grp['stim_class'] = grp.apply(lambda x: 'lure' if x['stimuli'].shift(1) == "Stop.bmp" \
-    #         else 'target' if x['stimuli'] in x['stim_targ_names'] else 'nontarget', axis=1)
+    elif block['type'].values[0] == 'gs':  # TODO: add stop var
+        block['stim_class'] = stim_gs(block)
+        block['resp_class'] = resp_gs(block)
+        
+        # = grp.apply(lambda x: 'lure' if x['stimuli'].shift(1) == "Stop.bmp" \
+        #     else 'target' if x['stimuli'] in x['stim_targ_names'] else 'nontarget', axis=1)
 
     return block
 
@@ -301,8 +325,20 @@ def stim_gng(block:pd.DataFrame) -> pd.Series:
     return block['stim_class']
 
 def stim_gs(block:pd.DataFrame) -> pd.Series:
-    #TODO
-    pass
+    '''
+    '''
+    
+    #targs = block['stim_targ_names'].values[0]
+
+    for i, row in block.iterrows():
+        if block.loc[i,'stimuli'] in block.loc[i,'stim_targ_names']:
+            if block.loc[i+1,'stimuli'] == block.loc[i+1,'stop']:
+                block.at[i,'stim_class'] = 'lure'
+            else:
+                block.at[i,'stim_class'] = 'target'
+    
+    return block['stim_class']
+
 
 def resp_go(block:pd.DataFrame) -> pd.Series:
     '''
@@ -347,18 +383,71 @@ def resp_gng(block:pd.DataFrame) -> pd.Series:
             
     return block['resp_class']
 
-def resp_gs(grp:pd.DataFrame) -> pd.Series:
+def resp_gs(block:pd.DataFrame) -> pd.Series:
+    '''
+    '''
+    for i, row in block.iterrows():
+        if block.loc[i,'stim_class'] == 'target':
+            if block.loc[i,'response'] == block.loc[i,'resp_key'] or block.loc[i+1,'response'] == block.loc[i+1,'resp_key']:
+                block.loc[i,'resp_class'] = 'hit'
+            else:
+                block.loc[i,'resp_class'] = 'om'
+        elif block.loc[i,'stim_class'] == 'lure':
+            if block.loc[i,'response'] == block.loc[i,'resp_key'] or block.loc[i+1,'response'] == block.loc[i+1,'resp_key'] \
+                or block.loc[i+2,'response'] == block.loc[i+2,'resp_key']:
+                block.loc[i,'resp_class'] = 'com'
+            else:
+                block.loc[i,'resp_class'] = 'rej'
+        elif i>1 and block.loc[i-1,'stim_class'] not in ['target','lure'] and block.loc[i-2,'stim_class'] not in ['target','lure'] \
+            and block.loc[i,'response'] == block.loc[i,'resp_key']:
+            block.loc[i,'resp_class'] = 'randcom'
+        else:
+            block.loc[i,'resp_class'] = ''
+            
+    return block['resp_class']
+
+def rt_adj(df:pd.DataFrame) -> pd.DataFrame:
     #TODO
-    pass
+    '''
+    '''
+    df['rt_adj'] = np.nan
+
+    for i, row in df.iterrows():
+
+        # if there's some response
+        if df.loc[i,'resp_class'] != '':
+
+            # if there's a response time in this row
+            if not np.isnan(df.loc[i,'rt']):
+                df.loc[i,'rt_adj'] = df.loc[i,'rt']
+
+            # if this is a target or lure and a response time in the next row
+            elif df.loc[i,'stim_class'] != '' and not np.isnan(df.loc[i+1,'rt']):
+                if 'stim_start' in df.columns:
+                    df.loc[i,'rt_adj'] = df.loc[i+1,'rt'] + (df.loc[i+1,'stim_start'] - df.loc[i,'stim_start'])
+                else:
+                    df.loc[i,'rt_adj'] = df.loc[i+1,'rt'] + df.loc[i,'stim_dur']
+            
+            # if this is a gs lure with response in the row after 'stop'
+            elif df.loc[i,'type'] == 'gs' and df.loc[i,'stim_class'] == 'lure' and not np.isnan(df.loc[i+2,'rt']):
+                if 'stim_start' in df.columns:
+                    df.loc[i,'rt_adj'] = df.loc[i+2,'rt'] + (df.loc[i+2,'stim_start'] - df.loc[i,'stim_start'])
+                else:
+                    df.loc[i,'rt_adj'] = df.loc[i+2,'rt'] + df.loc[i,'stim_dur'] + df.loc[i+1,'stim_dur']
+            else:
+                df.loc[i,'rt_adj'] = np.nan
+        else:
+            df.loc[i,'rt_adj'] = np.nan
+
+    return df
 
 def onsets(df:pd.DataFrame) -> pd.DataFrame:
     #TODO
     '''
-    hits rej com om mo
     '''
     df['stim_start_adj'] = np.nan
     df['onsets'] = np.nan
-    df['rt_adj'] = np.nan
+    #df['rt_adj'] = np.nan
 
     for i, row in df.iterrows():
         if df.loc[i,'stim_start'] != '':
@@ -366,10 +455,10 @@ def onsets(df:pd.DataFrame) -> pd.DataFrame:
         if df.loc[i,'resp_class'] != '':
             if not np.isnan(df.loc[i,'rt']):
                 df.loc[i,'onsets'] = df.loc[i,'rt'] + (df.loc[i,'stim_start'] - df.loc[i,'exp_start'])
-                df.loc[i,'rt_adj'] = df.loc[i,'rt']
+                #df.loc[i,'rt_adj'] = df.loc[i,'rt']
             elif df.loc[i,'stim_class'] != '' and not np.isnan(df.loc[i+1,'rt']):
                 df.loc[i,'onsets'] = df.loc[i+1,'rt'] + (df.loc[i+1,'stim_start'] - df.loc[i+1,'exp_start'])
-                df.loc[i,'rt_adj'] = df.loc[i+1,'rt'] + (df.loc[i+1,'stim_start'] - df.loc[i,'stim_start'])
+                #df.loc[i,'rt_adj'] = df.loc[i+1,'rt'] + (df.loc[i+1,'stim_start'] - df.loc[i,'stim_start'])
             else:
                 df.loc[i,'onsets'] = df.loc[i,'stim_start'] - df.loc[i,'exp_start']
         else:
@@ -407,8 +496,7 @@ def score_df(df:pd.DataFrame) -> pd.DataFrame:
 
 def score_go(block:pd.DataFrame):
     '''
-    '''
-    
+    '''    
     stim_count = len(block['stim_targ_names'].head(1).values[0])
     block_scores = pd.DataFrame({
             f'go_{stim_count}T_hit':len(block.loc[block['resp_class']=='hit']),
@@ -458,10 +546,10 @@ def score_gs(block:pd.DataFrame):
             f'gs_{stim_count}T_hit_rt_sd':block.loc[block['resp_class']=='hit','rt_adj'].std(),
             f'gs_{stim_count}T_com_rt_mean':block.loc[block['resp_class']=='com','rt_adj'].mean(),
             f'gs_{stim_count}T_com_rt_sd':block.loc[block['resp_class']=='com','rt_adj'].std(),
-            f'gs_{stim_count}T_stp_tm':'', #TODO
-            f'gs_{stim_count}T_stp_tm_f':'',
+            f'gs_{stim_count}T_stp_tm_rej':block.loc[block['resp_class']=='rej','stim_dur'].mean(),
+            f'gs_{stim_count}T_stp_tm_com':block.loc[block['resp_class']=='com','stim_dur'].mean(),
             f'gs_{stim_count}T_pctt':len(block.loc[block['resp_class']=='hit']) / len(block.loc[block['stim_class']=='target']),
-            f'gs_{stim_count}T_pcit':''
+            f'gs_{stim_count}T_pcit':len(block.loc[block['resp_class']=='rej']) / len(block.loc[block['stim_class']=='lure'])
             },
             index=[0])
     
