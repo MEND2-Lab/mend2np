@@ -6,6 +6,6 @@ Each test has one Python script (pgng.py) which contains all the relevant functi
 
 Recommend Python 3.13.6
 
-Dependencies are listed in requirements.txt and can be installed into your Python environment with `pip install -r requirements.txt1`
+Dependencies are listed in requirements.txt and can be installed into your Python environment with `pip install -r requirements.txt`
 
 #TODO
