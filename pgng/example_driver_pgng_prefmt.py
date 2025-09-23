@@ -24,10 +24,9 @@ addtional required for timing: exp_start, stim_start, stim_dur
 
 '''
 
-from context import scorenp
-from scorenp import pgng
+import pgng
 
-# params structure if data is formatted:
+# params structure if data is formatted (tidy):
 params = {
     'cols':{
         'id':'id',

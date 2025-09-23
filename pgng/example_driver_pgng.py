@@ -2,8 +2,7 @@
 
 '''
 
-from context import scorenp
-from scorenp import pgng
+import pgng
 
 # params structure if data is unformatted:
 params = {
@@ -106,7 +105,5 @@ params = {
         }
     }
 }
-
-#pgng.main(params=params,formatted=False,out="out",filelist=['tests/example_data/example_data_psychopy_pgng_2.csv'])
 
 pgng.pgng(params=params,formatted=False,out="out")

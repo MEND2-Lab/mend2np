@@ -1,12 +1,9 @@
 # mend2_neuropsych
 
+Python 3.13.6
 
-1. general script to select and quality check files
-2. task specific scripts to format data
-3. task specific scripts to score
-    a. performance
-    b. timing
-    c. additional QC
-    d. custom features 
+Modular scripts in Python to format, score, and extract timing/event information from MEND2 lab neuropsychological tests.
+
+Each test has one Python script (pgng.py) which contains all the relevant functions for that test. The main function (pgng.pgng()) can be called from a separate Python script (example_driver_pgng.py) and passed a dictionary of parameters for your particular version of the test.
 
 #TODO

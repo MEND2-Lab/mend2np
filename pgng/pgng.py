@@ -2,16 +2,21 @@
 
 '''
 import pandas as pd
-from . import utils
 import os
 import numpy as np
 import traceback
 import sys
 import math
+import logging
 from collections.abc import Iterable
 from pandas.api.types import is_numeric_dtype
+import os
+import re
+import logging
+from datetime import datetime
+from tkinter import filedialog as fd
 
-def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out:str=os.getcwd(),filelist:str|list=''):
+def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out:str=os.getcwd(),filelist:str|list='',log=20):
     '''
     '''
 
@@ -20,14 +25,8 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
 
     # initiate logger
     global logger
-    logger = utils.setup_logger(name='root',out=out)
+    logger = setup_logger(name='root',out=out,level=log)
     logger.info("start")
-
-    # temporary error log, add proper logging later
-    # global error_log
-    # error_log = os.path.join(out,'error_log.csv')
-    # if os.path.exists(error_log):
-    #     os.remove(error_log)
     
     # sort how the file list was passed
     if filelist:
@@ -40,17 +39,16 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
                 filepaths = [line.strip() for line in open(filelist, 'r', encoding='utf-8')]
             except Exception as e:
                 logger.critical(f'problem reading filelist: {filelist}: {e}\n{traceback.format_exc()}\n')
-                #print(f'problem reading file list: {filelist}: {e}')
                 sys.exit(1)
         else:
             logger.critical(f'problem with filelist: {filelist}, consult docs or leave blank to use GUI file select')
-            #print('problem with filelist, consult docs or leave blank to use GUI file select')
             sys.exit(1)
     else:
         # else do the GUI file select
-        filepaths = utils.select_files()
+        filepaths = select_files()
 
     # initiate combined files
+    combined_trials = pd.DataFrame()
     if score:
         combined_scores = pd.DataFrame()
     if not np.isnan(cov_window):
@@ -63,7 +61,7 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
 
         # putting everything in a try block & write errors to error_log
         try:
-            filename_id = utils.parse_files(filepath)
+            filename_id = parse_files(filepath)
             filename = os.path.basename(filepath)
             
             # read data
@@ -90,6 +88,8 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
             df.insert(1,'filename_id',filename_id)
             write_out(df,out,False,'tsv')
 
+            combined_trials = pd.concat([combined_trials,df],axis=0,ignore_index=True)
+        
             #TODO write formatted onsets file
 
             # make some score output
@@ -100,18 +100,54 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
 
         except Exception as e:
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
-            # with open(error_log, 'a') as f:
-            #     f.write(f'{filename} : {e}\n{traceback.format_exc()}\n')
             continue
     
+    if not combined_trials.empty:
+        write_out(combined_trials,out,True,'csv','trials')
     if score and not combined_scores.empty:
         write_out(combined_scores,out,True,'csv','scores')
-        #combined_scores.to_csv(os.path.join(out,f"scores_{combined_scores['exp_name'].head(1).values[0]}_n{len(combined_scores)}.csv"),index=False)
     if not np.isnan(cov_window) and not combined_cov.empty:
         write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
-        #combined_cov.to_csv(os.path.join(out,f"cov_{combined_cov['exp_name'].head(1).values[0]}_{cov_window}s_n{combined_cov['filename_id'].nunique()}.csv"),index=False)
     
     logger.info('end')
+
+def setup_logger(name,out,level):
+    datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')
+    formatter = logging.Formatter(fmt='%(asctime)s : %(levelname)s : %(module)s : %(message)s')
+    stream_handler = logging.StreamHandler()
+    file_handler = logging.FileHandler(os.path.join(out,f'log_{datetime_string}.log'),mode='w')
+    stream_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.addHandler(stream_handler)
+    logger.addHandler(file_handler)
+    return logger
+
+def select_files() -> tuple:
+    filepaths = fd.askopenfilenames(
+        title='Select CSV files to score',
+        filetypes=(("CSV Files", "*.csv"),),
+        initialdir=os.getcwd(),
+        multiple=True)
+    return filepaths
+
+def parse_files(filepath:str) -> tuple:
+    # parse file name into useful bits
+    basename = os.path.basename(filepath)
+    base = basename.rsplit('.', 1)[0]  
+    parts = base.split('_')
+    date_str = parts[-2] + '_' + parts[-1]
+    for fmt in ["%Y-%m-%d_%Hh%M.%S.%f","%m-%d-%Y_%Hh%M.%S.%f"]:
+        try:
+            dt = datetime.strptime(date_str,fmt)
+            break
+        except ValueError:
+            pass
+    id = re.match(r'^[^_]+',basename).group(0)
+
+    #return (id,dt,basename)
+    return (id)
 
 def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str=''):
 
@@ -139,8 +175,6 @@ def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str=''):
         filename = filename + f'.{filetype}'
         df.to_csv(os.path.join(out,filename),index=False,sep=sep)
 
-    #df.to_csv(os.path.join(out,f"{df['filename_id'].values[0]}_{df['session'].values[0]}_PGNG{tag}_{df['datetime'].values[0]}.{type}"),index=False,sep=sep)
-
 def check_cols(df:pd.DataFrame) -> bool:
     '''
     required: id, stimuli, response, rt, block, stim_targ_names, resp_key, type
@@ -152,30 +186,30 @@ def check_cols(df:pd.DataFrame) -> bool:
     for var in ['id','stimuli','response','rt','block','stim_targ_names','resp_key','type']:
         if var not in df.columns:
             all_good = False
-            logger.warn(f'required scoring column {var} not in dataset')
+            logger.warning(f'required scoring column {var} not in dataset')
             continue
         elif not df[var].notnull().any():
             all_good = False
-            logger.warn(f'required scoring column {var} is empty')
+            logger.warning(f'required scoring column {var} is empty')
             continue
 
     # additional checks
     if not is_numeric_dtype(df['rt']):
         all_good = False
-        logger.warn(f'column "rt" is not numeric')
+        logger.warning(f'column "rt" is not numeric')
     
     if df['response'].dtype != df['resp_key'].dtype:
         all_good = False
-        logger.warn(f'columns "response" and "resp_key" are not the same data type')
+        logger.warning(f'columns "response" and "resp_key" are not the same data type')
 
     if not isinstance(df['stim_targ_names'].head(1).values[0],Iterable):
         all_good = False
-        logger.warn(f'column "stim_targ_names" does not contain lists of target names')
+        logger.warning(f'column "stim_targ_names" does not contain lists of target names')
 
     for s in df['type'].unique():
         if s not in ['go','gng','gs']:
             all_good = False
-            logger.warn('values in the column "type" need to be one of ["go","gng","gs"]')
+            logger.warning('values in the column "type" need to be one of ["go","gng","gs"]')
     
     return all_good
         
@@ -192,15 +226,15 @@ def check_timging_cols(df:pd.DataFrame) -> bool:
     for var in ['exp_start','stim_start','stim_dur']:
         if var not in df.columns:
             all_good = False
-            logger.warn(f'column {var} not in dataset, will proceed without timing calcs')
+            logger.debug(f'column {var} not in dataset, will proceed without timing calcs')
             continue
         elif not df[var].notnull().any():
             all_good = False
-            logger.warn(f'column {var} is empty, will proceed without timing calcs')
+            logger.debug(f'column {var} is empty, will proceed without timing calcs')
             continue
         if not is_numeric_dtype(df[var]):
             all_good = False
-            logger.warn(f'column {var} is not numeric, will proceed without timing calcs')
+            logger.debug(f'column {var} is not numeric, will proceed without timing calcs')
         
     return all_good
 
@@ -243,8 +277,6 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
 
         except Exception as e:
             logger.error(f"{tmpdf['id'].values[0]} : {e}\n{traceback.format_exc()}\n")
-            #with open(error_log, 'a') as f:
-                #f.write(f"{tmpdf['id'].values[0]} : {e}\n{traceback.format_exc()}\n")
             continue
 
 
@@ -407,7 +439,6 @@ def resp_gs(block:pd.DataFrame) -> pd.Series:
     return block['resp_class']
 
 def rt_adj(df:pd.DataFrame) -> pd.DataFrame:
-    #TODO
     '''
     '''
     df['rt_adj'] = np.nan
@@ -598,67 +629,3 @@ def cov_df(df:pd.DataFrame,window_duration:float):
             df_cov = pd.concat([df_cov,window_row],axis=0)
 
     return df_cov
-
-    # for resp_class_str in ['hit','com']:
-
-    #     df_filtered = df.loc[df['resp_class']==resp_class_str]
-
-    #     window_start = df_filtered['onsets'].head(1).values[0]
-    #     last_onset = df_filtered['onsets'].tail(1).values[0]
-
-    #     global_window = df_filtered['rt_adj'].values
-
-    #     df_cov = pd.DataFrame({
-    #         'filename_id':df_filtered['filename_id'].head(1).values[0],
-    #         'id':df_filtered['id'].head(1).values[0],
-    #         'session':df_filtered['session'].head(1).values[0],
-    #         'datetime':df_filtered['datetime'].head(1).values[0],
-    #         'block':np.nan,
-    #         'type':'',
-    #         'resp_class':'',
-    #         'window_start':window_start,
-    #         'window_end':last_onset,
-    #         'rt_count':len(global_window),
-    #         'rt_mean':np.mean(global_window),
-    #         'rt_sd':np.std(global_window),
-    #         'rt_cov':np.std(global_window)/np.mean(global_window)},
-    #         index=[0])
-        
-    #     df_cov_blocks = df_filtered.set_index('block').groupby('block',as_index=False).apply(lambda x: cov_group(x,window_increment,rt_count))
-    #     df_cov = pd.concat([df_cov,df_cov_blocks])
-    #     write_out(df=df_cov,out=out,type='csv',tag=f'_COV_{resp_class_str}')
-    #     #df_cov.to_csv(os.path.join(out,f"{df['filename_id'].head(1).values[0]}_{df['session'].head(1).values[0]}_PGNG_COV_{resp_class_str}_{df['datetime'].head(1).values[0]}.csv"),index=False)
-
-# def cov_group(df:pd.DataFrame,cov_window_increment:float,cov_rt_count:int) -> pd.DataFrame:
-
-#     df.reset_index(inplace=True)
-
-#     window_start = df['onsets'].head(1).values[0]
-#     last_onset = df['onsets'].tail(1).values[0]
-
-#     group_window = df['rt_adj'].values
-
-#     df_cov = pd.DataFrame({'window_start':window_start,'window_end':last_onset,
-#                             'rt_count':len(group_window),'rt_mean':np.mean(group_window),
-#                             'rt_sd':np.std(group_window),'rt_cov':np.std(group_window)/np.mean(group_window)},
-#                             index=[0])
-
-#     while window_start < last_onset:
-#         local_window = df[df['onsets'] >= window_start][['onsets','rt_adj']].head(cov_rt_count)
-
-#         if len(local_window['rt_adj']) < cov_rt_count:
-#             break
-
-#         window_row = pd.DataFrame({'window_start':window_start,'window_end':local_window['onsets'].tail(1).values[0],
-#                                    'rt_count':len(local_window['rt_adj']),'rt_mean':np.mean(local_window['rt_adj']),
-#                                    'rt_sd':np.std(local_window['rt_adj']),'rt_cov':np.std(local_window['rt_adj'])/np.mean(local_window['rt_adj'])},
-#                                    index=[0])
-        
-#         df_cov = pd.concat([df_cov,window_row],ignore_index=True,axis=0)
-
-#         window_start += cov_window_increment
-
-#     for var in ['resp_class','type','block','datetime','session','filename_id','id']:
-#         df_cov.insert(loc=0, column=var, value=df[var].head(1).values[0])
-
-#     return df_cov
