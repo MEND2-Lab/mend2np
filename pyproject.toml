@@ -32,3 +32,9 @@ Homepage = "https://github.com/MEND2-Lab/mend2np"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pgng"]
+
+[tool.hatch.version]
+source = "versioningit"
+
+[tool.versioningit]
+default-version = "0.0.0" # Fallback version
