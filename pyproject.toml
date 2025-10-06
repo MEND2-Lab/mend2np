@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mend2np"
-version = "0.0.1"
+dynamic = ["version"]
 authors = [
   { name="Matthew Thompson", email="matthew.thompson@osumc.edu" },
 ]
