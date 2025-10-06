@@ -29,3 +29,6 @@ license-files = ["LICEN[CS]E*"]
 
 [project.urls]
 Homepage = "https://github.com/MEND2-Lab/mend2np"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pgng"]
