@@ -74,7 +74,7 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
 
             if not check_cols(df):
                 logger.error('columns misspecified, skipping this file')
-                
+
             # add event columns
             df = events_df(df)
             
@@ -282,7 +282,7 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
             tmpdf['block'] = block
 
         except Exception as e:
-            logger.error(f"{tmpdf['id'].values[0]} : {e}\n{traceback.format_exc()}\n")
+            logger.error(f"{e}\n{traceback.format_exc()}\n")
             continue
 
 
