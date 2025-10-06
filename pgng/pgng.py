@@ -73,9 +73,8 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
                 df = format_df(df,params)
 
             if not check_cols(df):
-                logger.critical('columns misspecified')
-                sys.exit(1)
-
+                logger.error('columns misspecified, skipping this file')
+                
             # add event columns
             df = events_df(df)
             
