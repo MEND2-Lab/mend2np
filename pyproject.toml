@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mend2np"
+version = "0.0.1"
+authors = [
+  { name="Matthew Thompson", email="matthew.thompson@osumc.edu" },
+]
+description = "MEND2 lab neuropsychological data scoring"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "easygui==0.98.3",
+    "numpy==2.3.2",
+    "pandas==2.3.1",
+    "python-dateutil==2.9.0.post0",
+    "pytz==2025.2",
+    "six==1.17.0",
+    "tzdata==2025.2"
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/MEND2-Lab/mend2np"

@@ -10,6 +10,7 @@ import math
 import logging
 from collections.abc import Iterable
 from pandas.api.types import is_numeric_dtype
+from pandas.api.types import is_string_dtype
 import os
 import re
 import logging
@@ -30,7 +31,7 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
     
     # sort how the file list was passed
     if filelist:
-        if isinstance(filelist,Iterable):
+        if isinstance(filelist, list):
             # if filelist is iterable
             filepaths = filelist
         elif os.path.isfile(filelist):
@@ -85,7 +86,7 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
             if check_timging_cols(df):
                 df = onsets(df)
 
-            df.insert(1,'filename_id',filename_id)
+            df.insert(1,'filename',filename)
             write_out(df,out,False,'tsv')
 
             combined_trials = pd.concat([combined_trials,df],axis=0,ignore_index=True)
@@ -272,6 +273,12 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
             # for gs, update stim_dur to correct times
             if 'stop_time' in params['blocks'][block]['cols']:
                 tmpdf['stim_dur'] = df.loc[mask,params['blocks'][block]['cols']['stop_time']]
+
+            # clean & validate numeric columns
+            for num_col in ['rt', 'exp_start', 'stim_start', 'stim_dur']:
+                if num_col in tmpdf.columns and is_string_dtype(tmpdf[num_col]):
+                    tmpdf[num_col] = tmpdf[num_col].str.replace(r'[^\d.]', '', regex=True)
+                    tmpdf[num_col] = pd.to_numeric(tmpdf[num_col], errors='coerce')
 
             tmpdf['block'] = block
 
@@ -502,7 +509,7 @@ def score_df(df:pd.DataFrame) -> pd.DataFrame:
     '''
     # setup meta columns
     df_scores = pd.DataFrame({
-            'filename_id':df['filename_id'].head(1).values[0],
+            'filename':df['filename'].head(1).values[0],
             'id':df['id'].head(1).values[0],
             'session':df['session'].head(1).values[0],
             'datetime':df['datetime'].head(1).values[0],
