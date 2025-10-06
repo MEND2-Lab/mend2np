@@ -158,7 +158,7 @@ def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str=''):
 
     if merged:
         if 'exp_name' in df.columns:
-            exp_name = df['exp_name'].head(1).values[0]
+            exp_name = str(df['exp_name'].head(1).values[0]).replace(os.sep,'')
         else:
             exp_name = 'PGNG'
         filename = f"{exp_name}_n{df['id'].nunique()}_{tag}.{filetype}"
@@ -169,9 +169,9 @@ def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str=''):
         for var in ['filename_id','id','session','exp_name','datetime']:
             if var in df.columns:
                 if not filename:
-                    filename =  ''.join([filename,str(df[var].head(1).values[0])])
+                    filename =  ''.join([filename,str(df[var].head(1).values[0]).replace(os.sep,'')])
                 else:
-                    filename = '_'.join([filename,str(df[var].head(1).values[0])])
+                    filename = '_'.join([filename,str(df[var].head(1).values[0]).replace(os.sep,'')])
         filename = filename + f'.{filetype}'
         df.to_csv(os.path.join(out,filename),index=False,sep=sep)
 
