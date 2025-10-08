@@ -14,6 +14,7 @@ from pandas.api.types import is_string_dtype
 import os
 import re
 import logging
+from ast import literal_eval
 from datetime import datetime
 from tkinter import filedialog as fd
 
@@ -197,12 +198,15 @@ def check_cols(df:pd.DataFrame) -> bool:
     if not is_numeric_dtype(df['rt']):
         all_good = False
         logger.warning(f'column "rt" is not numeric')
-    
-    if df['response'].dtype != df['resp_key'].dtype:
-        all_good = False
-        logger.warning(f'columns "response" and "resp_key" are not the same data type')
 
-    if not isinstance(df['stim_targ_names'].head(1).values[0],Iterable):
+    # check if reponse & rt columns have compatible data types for comparison
+    if (is_numeric_dtype(df['response']) and is_string_dtype(df['rt'])) or \
+    (is_string_dtype(df['response']) and is_numeric_dtype(df['rt'])):
+        all_good = False
+        logger.warning(f'columns "response" and "resp_key" have incompatible data types\n \
+                       response dtype: {df["response"].dtype}, rt dtype: {df["resp_key"].dtype}')
+
+    if not isinstance(df['stim_targ_names'].head(1).values[0],list):
         all_good = False
         logger.warning(f'column "stim_targ_names" does not contain lists of target names')
 
@@ -273,6 +277,12 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
             if 'stop_time' in params['blocks'][block]['cols']:
                 tmpdf['stim_dur'] = df.loc[mask,params['blocks'][block]['cols']['stop_time']]
 
+            # handle multiple responses for touchscreen-based versions
+            for resp_col in ['response','rt']:
+                if resp_col in tmpdf.columns:
+                    # if string representation of a list, and list is not empty, keep only the first value of list
+                    tmpdf[resp_col] = tmpdf[resp_col].apply(handle_multiple_responses)
+
             # clean & validate numeric columns
             for num_col in ['rt', 'exp_start', 'stim_start', 'stim_dur']:
                 if num_col in tmpdf.columns and is_string_dtype(tmpdf[num_col]):
@@ -285,12 +295,22 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
             logger.error(f"{e}\n{traceback.format_exc()}\n")
             continue
 
-
         fmtdf = pd.concat([fmtdf,tmpdf],ignore_index=True)
-
 
     return fmtdf
     
+def handle_multiple_responses(value) -> str|float|int|None:
+    # if string representation of a list, and list is not empty, keep only the first value of list
+    if isinstance(value,str) and re.match(r'^\[.*\]$',value):
+        eval_value = literal_eval(value)
+        if isinstance(eval_value,list):
+            if len(eval_value) > 0:
+                return eval_value[0]
+            else:
+                return None
+    else:
+        return value
+
 def events_df(df:pd.DataFrame) -> pd.DataFrame:
     '''
     label rows as PGNGS event types
