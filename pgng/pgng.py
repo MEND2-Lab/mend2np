@@ -11,9 +11,7 @@ import logging
 from collections.abc import Iterable
 from pandas.api.types import is_numeric_dtype
 from pandas.api.types import is_string_dtype
-import os
 import re
-import logging
 from ast import literal_eval
 from datetime import datetime
 from tkinter import filedialog as fd
@@ -95,20 +93,28 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
 
             # make some score output
             if score:
-                combined_scores = pd.concat([combined_scores,score_df(df)],axis=0,ignore_index=True)
+                this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
+                combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
             if not np.isnan(cov_window):
-                combined_cov = pd.concat([combined_cov,cov_df(df,window_duration=cov_window)],axis=0,ignore_index=True)
+                this_row = pd.concat([get_meta_cols(df,params),cov_df(df,window_duration=cov_window)],axis=1,ignore_index=True)
+                combined_cov = pd.concat([combined_cov,this_row],axis=0,ignore_index=True)
 
         except Exception as e:
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
+            print("see log file for errors")
             continue
-    
-    if not combined_trials.empty:
-        write_out(combined_trials,out,True,'csv','trials')
-    if score and not combined_scores.empty:
-        write_out(combined_scores,out,True,'csv','scores')
-    if not np.isnan(cov_window) and not combined_cov.empty:
-        write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
+        
+        try:
+            if not combined_trials.empty:
+                write_out(combined_trials,out,True,'csv','trials')
+            if score and not combined_scores.empty:
+                write_out(combined_scores,out,True,'csv','scores')
+            if not np.isnan(cov_window) and not combined_cov.empty:
+                write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
+        except Exception as e:
+            logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
+            print("see log file for errors")
+
     
     logger.info('end')
 
@@ -293,6 +299,7 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
 
         except Exception as e:
             logger.error(f"{e}\n{traceback.format_exc()}\n")
+            print("see log file for errors")
             continue
 
         fmtdf = pd.concat([fmtdf,tmpdf],ignore_index=True)
@@ -310,6 +317,19 @@ def handle_multiple_responses(value) -> str|float|int|None:
                 return None
     else:
         return value
+
+def get_meta_cols(df,params):
+    '''
+    for aggregated values (one row per participant) collect meta variables into one row
+    '''
+
+    metacols_df = pd.DataFrame(index=[0])
+
+    for metacol in params['metacols']:
+        if params['metacols'][metacol]:
+            metacols_df[metacol] = df[metacol].head(1).values[0]
+
+    return metacols_df.reset_index(drop=True)
 
 def events_df(df:pd.DataFrame) -> pd.DataFrame:
     '''
@@ -526,17 +546,19 @@ def onsets(df:pd.DataFrame) -> pd.DataFrame:
 def score_df(df:pd.DataFrame) -> pd.DataFrame:
     '''
     '''
-    # setup meta columns
-    df_scores = pd.DataFrame({
-            'filename':df['filename'].head(1).values[0],
-            'id':df['id'].head(1).values[0],
-            'session':df['session'].head(1).values[0],
-            'datetime':df['datetime'].head(1).values[0],
-            'exp_name':df['exp_name'].head(1).values[0],
-            'software_version':df['software_version'].head(1).values[0],
-            'framerate':df['framerate'].head(1).values[0]
-            },
-            index=[0]).reset_index(drop=True)
+    # # setup meta columns
+    # df_scores = pd.DataFrame({
+    #         'filename':df['filename'].head(1).values[0],
+    #         'id':df['id'].head(1).values[0],
+    #         'session':df['session'].head(1).values[0],
+    #         'datetime':df['datetime'].head(1).values[0],
+    #         'exp_name':df['exp_name'].head(1).values[0],
+    #         'software_version':df['software_version'].head(1).values[0],
+    #         'framerate':df['framerate'].head(1).values[0]
+    #         },
+    #         index=[0]).reset_index(drop=True)
+
+    df_scores = pd.DataFrame(index=[0])
     
     for _, blk in df.groupby('block'):
         if blk['type'].values[0] == 'go':
@@ -635,11 +657,11 @@ def cov_df(df:pd.DataFrame,window_duration:float):
 
             # build window row
             window_row = pd.DataFrame({
-                'filename_id':window['filename_id'].head(1).values[0],
-                'id':window['id'].head(1).values[0],
-                'session':window['session'].head(1).values[0],
-                'datetime':window['datetime'].head(1).values[0],
-                'exp_name':window['exp_name'].head(1).values[0],
+                # 'filename_id':window['filename_id'].head(1).values[0],
+                # 'id':window['id'].head(1).values[0],
+                # 'session':window['session'].head(1).values[0],
+                # 'datetime':window['datetime'].head(1).values[0],
+                # 'exp_name':window['exp_name'].head(1).values[0],
                 'block':window['block'].head(1).values[0],
                 'type':window['type'].head(1).values[0],
                 'resp_class':window['resp_class'].head(1).values[0],
