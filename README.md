@@ -8,4 +8,6 @@ Recommend Python 3.13.6
 
 Dependencies are listed in requirements.txt and can be installed into your Python environment with `pip install -r requirements.txt`
 
+Alternatively, install package with `pip install git+https://github.com/MEND2-Lab/mend2np.git`
+
 #TODO

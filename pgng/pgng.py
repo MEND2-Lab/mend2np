@@ -117,6 +117,9 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
 
     
     logger.info('end')
+    
+    if score:
+        return combined_scores
 
 def setup_logger(name,out,level):
     datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')
