@@ -72,6 +72,9 @@ def bart(params:dict,out:str=os.getcwd(),filelist:str|list='',formatted:bool=Fal
     
     logger.info('end')
 
+    if score:
+        return combined_scores
+
 
 def setup_logger(name,out,level):
     datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')

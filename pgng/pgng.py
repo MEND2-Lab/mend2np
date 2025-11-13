@@ -16,7 +16,7 @@ from ast import literal_eval
 from datetime import datetime
 from tkinter import filedialog as fd
 
-def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out:str=os.getcwd(),filelist:str|list='',log=20):
+def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out:str=os.getcwd(),filelist:str|list='',log=20,ind:bool=False):
     '''
     '''
 
@@ -85,7 +85,10 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
                 df = onsets(df)
 
             df.insert(1,'filename',filename)
-            write_out(df,out,False,'tsv')
+
+            # write individual file if requested
+            if ind:
+                write_out(df,out,False,'tsv')
 
             combined_trials = pd.concat([combined_trials,df],axis=0,ignore_index=True)
         
@@ -104,18 +107,17 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
             print("see log file for errors")
             continue
         
-        try:
-            if not combined_trials.empty:
-                write_out(combined_trials,out,True,'csv','trials')
-            if score and not combined_scores.empty:
-                write_out(combined_scores,out,True,'csv','scores')
-            if not np.isnan(cov_window) and not combined_cov.empty:
-                write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
-        except Exception as e:
-            logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
-            print("see log file for errors")
+    try:
+        if not combined_trials.empty:
+            write_out(combined_trials,out,True,'csv','trials')
+        if score and not combined_scores.empty:
+            write_out(combined_scores,out,True,'csv','scores')
+        if not np.isnan(cov_window) and not combined_cov.empty:
+            write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
+    except Exception as e:
+        logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
+        print("see log file for errors")
 
-    
     logger.info('end')
     
     if score:

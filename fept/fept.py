@@ -13,7 +13,7 @@ from ast import literal_eval
 from datetime import datetime
 from tkinter import filedialog as fd
 
-def fept(params:dict,formatted:bool=False,score=True,out:str=os.getcwd(),filelist:str|list='',log=20):
+def fept(params:dict,formatted:bool=False,score=True,out:str=os.getcwd(),filelist:str|list='',log=20,ind:bool=False):
     '''
     '''
 
@@ -62,7 +62,8 @@ def fept(params:dict,formatted:bool=False,score=True,out:str=os.getcwd(),filelis
             if not formatted:
                 df = format_df(df,params)
                 df.insert(1,'filename',filename)
-                write_out(df,out,False,'csv')
+                if ind:
+                    write_out(df,out,False,'csv')
 
             if score:
                 this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
@@ -81,6 +82,9 @@ def fept(params:dict,formatted:bool=False,score=True,out:str=os.getcwd(),filelis
     except Exception as e:
         logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
         print("see log file for errors")
+
+    if score:
+        return combined_scores
     
 def setup_logger(name,out,level):
     datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')
