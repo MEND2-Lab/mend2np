@@ -8,7 +8,8 @@ params = {
         'datetime':'date',
         'exp_name':'expName',
         'software_version':'psychopyVersion',
-        'framerate':'frameRate'
+        'framerate':'frameRate',
+        'os':'OS'
     },
     'blocks':{
         '1':{
@@ -32,8 +33,7 @@ params = {
             },
             # include the following 'stim_class_map' entry to parse characteristics of the stimulus
             # based on the filename of the stimulus
-            # eg. parse As_F_Hap_152.jpg as 'asian' 'female' 'happy'
-            # with each charactistic in its respective column
+            # eg. parse As_F_Hap_152.jpg as 'asian;female;happy'
             'stim_class_map':{ 
                 'emotion':{
                     'Hap':'happy',

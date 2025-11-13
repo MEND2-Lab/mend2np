@@ -10,7 +10,8 @@ params = {
         'datetime':'date',
         'exp_name':'expName',
         'software_version':'psychopyVersion',
-        'framerate':'frameRate'
+        'framerate':'frameRate',
+        'os':'OS'
     },
     'cols':{
         'nPumps':'nPumps',

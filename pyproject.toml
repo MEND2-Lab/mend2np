@@ -10,7 +10,7 @@ authors = [
 ]
 description = "MEND2 lab neuropsychological data scoring"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "easygui==0.98.3",
     "numpy==2.3.2",
