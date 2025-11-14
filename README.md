@@ -2,12 +2,11 @@
 
 Modular scripts in Python to format, score, and extract timing/event information from MEND2 lab neuropsychological tests.
 
-Each test has one Python script (pgng.py) which contains all the relevant functions for that test. The main function (pgng.pgng()) can be called from a separate Python script (example_driver_pgng.py) and passed a dictionary of parameters for your particular version of the test.
+Recommend Python >= 3.12
 
-Recommend Python 3.13.6
+Install with:
+`pip install git+https://github.com/MEND2-Lab/mend2np.git`
 
-Dependencies are listed in requirements.txt and can be installed into your Python environment with `pip install -r requirements.txt`
-
-Alternatively, install package with `pip install git+https://github.com/MEND2-Lab/mend2np.git`
+Each scoring module contains a main function (e.g., [pgng](mend2np/pgng.py)) to which is passed a list of data filenames, dictionary of parameters, and other configurable options. Example usage is found in the [tests](tests) directory.
 
 #TODO
