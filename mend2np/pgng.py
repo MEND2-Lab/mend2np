@@ -7,16 +7,12 @@ import numpy as np
 import traceback
 import sys
 import math
-import logging
-from collections.abc import Iterable
 from pandas.api.types import is_numeric_dtype
 from pandas.api.types import is_string_dtype
-import re
-from ast import literal_eval
-from datetime import datetime
-from tkinter import filedialog as fd
+from mend2np.utils import setup_logger, select_files, parse_files, write_out, get_meta_cols, handle_multiple_responses
 
-def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out:str=os.getcwd(),filelist:str|list='',log=20,ind:bool=False):
+def pgng(params:dict, formatted:bool=False, score=True, cov_window:float=np.nan, out:str=os.getcwd(), 
+         filelist:str|list='', log=20, ind:bool=False, verbose:bool=False):
     '''
     '''
 
@@ -25,7 +21,7 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
 
     # initiate logger
     global logger
-    logger = setup_logger(name='root',out=out,level=log)
+    logger = setup_logger(name='root',out=out,level=log,verbose=verbose)
     logger.info("start")
     
     # sort how the file list was passed
@@ -97,6 +93,7 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
             # make some score output
             if score:
                 this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
+                this_row.insert(1,'filename',filename)
                 combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
             if not np.isnan(cov_window):
                 this_row = pd.concat([get_meta_cols(df,params),cov_df(df,window_duration=cov_window)],axis=1,ignore_index=True)
@@ -122,70 +119,6 @@ def pgng(params:dict,formatted:bool=False,score=True,cov_window:float=np.nan,out
     
     if score:
         return combined_scores
-
-def setup_logger(name,out,level):
-    datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')
-    formatter = logging.Formatter(fmt='%(asctime)s : %(levelname)s : %(module)s : %(message)s')
-    stream_handler = logging.StreamHandler()
-    file_handler = logging.FileHandler(os.path.join(out,f'log_{datetime_string}.log'),mode='w')
-    stream_handler.setFormatter(formatter)
-    file_handler.setFormatter(formatter)
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.addHandler(stream_handler)
-    logger.addHandler(file_handler)
-    return logger
-
-def select_files() -> tuple:
-    filepaths = fd.askopenfilenames(
-        title='Select CSV files to score',
-        filetypes=(("CSV Files", "*.csv"),),
-        initialdir=os.getcwd(),
-        multiple=True)
-    return filepaths
-
-def parse_files(filepath:str) -> tuple:
-    # parse file name into useful bits
-    basename = os.path.basename(filepath)
-    base = basename.rsplit('.', 1)[0]  
-    parts = base.split('_')
-    date_str = parts[-2] + '_' + parts[-1]
-    for fmt in ["%Y-%m-%d_%Hh%M.%S.%f","%m-%d-%Y_%Hh%M.%S.%f"]:
-        try:
-            dt = datetime.strptime(date_str,fmt)
-            break
-        except ValueError:
-            pass
-    id = re.match(r'^[^_]+',basename).group(0)
-
-    #return (id,dt,basename)
-    return (id)
-
-def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str=''):
-
-    if filetype == 'csv':
-        sep = ','
-    elif filetype == 'tsv':
-        sep = '\t'
-
-    if merged:
-        if 'exp_name' in df.columns:
-            exp_name = str(df['exp_name'].head(1).values[0]).replace(os.sep,'')
-        else:
-            exp_name = 'PGNG'
-        filename = f"{exp_name}_n{df['id'].nunique()}_{tag}.{filetype}"
-        df.to_csv(os.path.join(out,filename),index=False,sep=sep)
-
-    else:
-        filename = ''
-        for var in ['filename_id','id','session','exp_name','datetime']:
-            if var in df.columns:
-                if not filename:
-                    filename =  ''.join([filename,str(df[var].head(1).values[0]).replace(os.sep,'')])
-                else:
-                    filename = '_'.join([filename,str(df[var].head(1).values[0]).replace(os.sep,'')])
-        filename = filename + f'.{filetype}'
-        df.to_csv(os.path.join(out,filename),index=False,sep=sep)
 
 def check_cols(df:pd.DataFrame) -> bool:
     '''
@@ -310,31 +243,6 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
         fmtdf = pd.concat([fmtdf,tmpdf],ignore_index=True)
 
     return fmtdf
-    
-def handle_multiple_responses(value) -> str|float|int|None:
-    # if string representation of a list, and list is not empty, keep only the first value of list
-    if isinstance(value,str) and re.match(r'^\[.*\]$',value):
-        eval_value = literal_eval(value)
-        if isinstance(eval_value,list):
-            if len(eval_value) > 0:
-                return eval_value[0]
-            else:
-                return None
-    else:
-        return value
-
-def get_meta_cols(df,params):
-    '''
-    for aggregated values (one row per participant) collect meta variables into one row
-    '''
-
-    metacols_df = pd.DataFrame(index=[0])
-
-    for metacol in params['metacols']:
-        if params['metacols'][metacol]:
-            metacols_df[metacol] = df[metacol].head(1).values[0]
-
-    return metacols_df.reset_index(drop=True)
 
 def events_df(df:pd.DataFrame) -> pd.DataFrame:
     '''

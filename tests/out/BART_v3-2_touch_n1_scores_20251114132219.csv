@@ -1,0 +1,2 @@
+id,filename,session,datetime,exp_name,software_version,framerate,os,ntrials_popped,ntrials_unpopped,ptrials_popped,ptrials_unpopped,mean_pumps_popped,mean_pumps_unpopped,total_earnings,mean_earnings
+example_1,example_data_psychopy_bart_1.csv,1,2020-01-01_12h00.00.000,BART_v3-2_touch,2023.2.2,45.45454545,iPad,10,20,0.3333333333333333,0.6666666666666666,24.2,38.3,9980.0,332.6666666666667

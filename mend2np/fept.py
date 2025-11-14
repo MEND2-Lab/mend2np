@@ -8,12 +8,10 @@ import os
 import re
 import traceback
 import sys
-import logging
-from ast import literal_eval
-from datetime import datetime
-from tkinter import filedialog as fd
+from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
 
-def fept(params:dict,formatted:bool=False,score=True,out:str=os.getcwd(),filelist:str|list='',log=20,ind:bool=False):
+def fept(params:dict, formatted:bool=False, score=True, out:str=os.getcwd(), filelist:str|list='', 
+         log:int|str=20, ind:bool=False):
     '''
     '''
 
@@ -67,6 +65,7 @@ def fept(params:dict,formatted:bool=False,score=True,out:str=os.getcwd(),filelis
 
             if score:
                 this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
+                this_row.insert(1,'filename',filename)
                 combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
 
         except Exception as e:
@@ -85,53 +84,6 @@ def fept(params:dict,formatted:bool=False,score=True,out:str=os.getcwd(),filelis
 
     if score:
         return combined_scores
-    
-def setup_logger(name,out,level):
-    datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')
-    formatter = logging.Formatter(fmt='%(asctime)s : %(levelname)s : %(module)s : %(message)s')
-    stream_handler = logging.StreamHandler()
-    file_handler = logging.FileHandler(os.path.join(out,f'log_{datetime_string}.log'),mode='w')
-    stream_handler.setFormatter(formatter)
-    file_handler.setFormatter(formatter)
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.addHandler(stream_handler)
-    logger.addHandler(file_handler)
-    return logger
-
-def select_files() -> tuple:
-    filepaths = fd.askopenfilenames(
-        title='Select CSV files to score',
-        filetypes=(("CSV Files", "*.csv"),),
-        initialdir=os.getcwd(),
-        multiple=True)
-    return filepaths
-
-def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str=''):
-
-    if filetype == 'csv':
-        sep = ','
-    elif filetype == 'tsv':
-        sep = '\t'
-
-    if merged:
-        if 'exp_name' in df.columns:
-            exp_name = str(df['exp_name'].head(1).values[0]).replace(os.sep,'')
-        else:
-            exp_name = 'FEPT'
-        filename = f"{exp_name}_n{df['id'].nunique()}_{tag}.{filetype}"
-        df.to_csv(os.path.join(out,filename),index=False,sep=sep)
-
-    else:
-        filename = ''
-        for var in ['filename_id','id','session','exp_name','datetime']:
-            if var in df.columns:
-                if not filename:
-                    filename =  ''.join([filename,str(df[var].head(1).values[0]).replace(os.sep,'')])
-                else:
-                    filename = '_'.join([filename,str(df[var].head(1).values[0]).replace(os.sep,'')])
-        filename = filename + f'.{filetype}'
-        df.to_csv(os.path.join(out,filename),index=False,sep=sep)
 
 def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     '''
@@ -171,6 +123,12 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
 
             tmpdf['stim_class'] = tmpdf['stimuli'].apply(lambda x: parse_stimulus_filename(x,regex_map,stim_class_map))
 
+        # handle multiple responses for touchscreen-based versions
+        for resp_col in ['response','rt']:
+            if resp_col in tmpdf.columns:
+                # if string representation of a list, and list is not empty, keep only the first value of list
+                tmpdf[resp_col] = tmpdf[resp_col].apply(handle_multiple_responses)
+        
         # TODO add validation
 
         tmpdf['block'] = block
@@ -194,19 +152,6 @@ def parse_stimulus_filename(filename,regex_map:dict,stim_class_map:dict,sep:str=
         if mapped_val:
             classes.append(mapped_val)
     return sep.join(classes)
-
-def get_meta_cols(df,params):
-    '''
-    for aggregated values (one row per participant) collect meta variables into one row
-    '''
-
-    metacols_df = pd.DataFrame(index=[0])
-
-    for metacol in params['metacols']:
-        if params['metacols'][metacol]:
-            metacols_df[metacol] = df[metacol].head(1).values[0]
-
-    return metacols_df.reset_index(drop=True)
 
 def score_df(df:pd.DataFrame):
     '''
@@ -241,7 +186,6 @@ def score_df(df:pd.DataFrame):
             df_scores[false_alarm_label] = len(error_type)
 
     return df_scores
-
 
 def score_blk(block,cat_name=None):
     '''

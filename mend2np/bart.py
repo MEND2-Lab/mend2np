@@ -4,19 +4,18 @@
 
 import os
 import sys
-import logging
 import traceback
 import pandas as pd
 import numpy as np
-from datetime import datetime
-from tkinter import filedialog as fd
+from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
 
-def bart(params:dict,out:str=os.getcwd(),filelist:str|list='',formatted:bool=False,score:bool=True,log=20):
+def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=False, score:bool=True,
+         log=20, verbose:bool=False):
 
     os.makedirs(out, exist_ok=True)
 
     global logger
-    logger = setup_logger(name='root',out=out,level=log)
+    logger = setup_logger(name='root',out=out,level=log,verbose=verbose)
     logger.info('start')
 
     # sort how the file list was passed
@@ -60,7 +59,9 @@ def bart(params:dict,out:str=os.getcwd(),filelist:str|list='',formatted:bool=Fal
             combined_trials = pd.concat([combined_trials,df],axis=0,ignore_index=True)
 
             if score:
-                combined_scores = pd.concat([combined_scores,score_df(df)],axis=0,ignore_index=True)
+                this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
+                this_row.insert(1,'filename',filename)
+                combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
 
         except Exception as e:
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
@@ -74,28 +75,6 @@ def bart(params:dict,out:str=os.getcwd(),filelist:str|list='',formatted:bool=Fal
 
     if score:
         return combined_scores
-
-
-def setup_logger(name,out,level):
-    datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')
-    formatter = logging.Formatter(fmt='%(asctime)s : %(levelname)s : %(module)s : %(message)s')
-    stream_handler = logging.StreamHandler()
-    file_handler = logging.FileHandler(os.path.join(out,f'log_{datetime_string}.log'),mode='w')
-    stream_handler.setFormatter(formatter)
-    file_handler.setFormatter(formatter)
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.addHandler(stream_handler)
-    logger.addHandler(file_handler)
-    return logger
-
-def select_files() -> tuple:
-    filepaths = fd.askopenfilenames(
-        title='Select CSV files to score',
-        filetypes=(("CSV Files", "*.csv"),),
-        initialdir=os.getcwd(),
-        multiple=True)
-    return filepaths
 
 def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     '''
@@ -115,6 +94,12 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
 
     #TODO: add quality checks, data type, empty, missing cols
 
+    # handle multiple responses for touchscreen-based versions
+    for resp_col in ['response','rt']:
+        if resp_col in fmtdf.columns:
+            # if string representation of a list, and list is not empty, keep only the first value of list
+            fmtdf[resp_col] = fmtdf[resp_col].apply(handle_multiple_responses)
+
     fmtdf['popped'] = fmtdf['popped'].astype(bool)
 
     return fmtdf
@@ -131,16 +116,7 @@ def score_df(df:pd.DataFrame):
     average earnings
     '''
 
-    #TODO: add flexible handling of meta columns
-
     scores = pd.DataFrame({
-        'filename':df['filename'].head(1).values[0],
-        'id':df['id'].head(1).values[0],
-        'session':df['session'].head(1).values[0],
-        'datetime':df['datetime'].head(1).values[0],
-        'exp_name':df['exp_name'].head(1).values[0],
-        'software_version':df['software_version'].head(1).values[0],
-        'framerate':df['framerate'].head(1).values[0],
         'ntrials_popped':sum(df['popped']),
         'ntrials_unpopped':sum(~df['popped']),
         'ptrials_popped':sum(df['popped'])/len(df['popped']),
@@ -153,29 +129,3 @@ def score_df(df:pd.DataFrame):
     index=[0])
 
     return scores
-
-def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str=''):
-
-    if filetype == 'csv':
-        sep = ','
-    elif filetype == 'tsv':
-        sep = '\t'
-
-    if merged:
-        if 'exp_name' in df.columns:
-            exp_name = str(df['exp_name'].head(1).values[0]).replace(os.sep,'')
-        else:
-            exp_name = 'BART'
-        filename = f"{exp_name}_n{df['id'].nunique()}_{tag}.{filetype}"
-        df.to_csv(os.path.join(out,filename),index=False,sep=sep)
-
-    else:
-        filename = ''
-        for var in ['filename_id','id','session','exp_name','datetime']:
-            if var in df.columns:
-                if not filename:
-                    filename =  ''.join([filename,str(df[var].head(1).values[0]).replace(os.sep,'')])
-                else:
-                    filename = '_'.join([filename,str(df[var].head(1).values[0]).replace(os.sep,'')])
-        filename = filename + f'.{filetype}'
-        df.to_csv(os.path.join(out,filename),index=False,sep=sep)

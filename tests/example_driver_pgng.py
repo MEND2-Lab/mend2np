@@ -2,7 +2,7 @@
 
 '''
 
-import pgng
+from mend2np.pgng import pgng
 
 # params structure if data is unformatted:
 params = {
@@ -107,4 +107,4 @@ params = {
     }
 }
 
-pgng.pgng(params=params,formatted=False,out="out")
+pgng(params=params,formatted=False,out="tests/out")

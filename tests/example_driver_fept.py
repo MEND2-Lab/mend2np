@@ -1,5 +1,5 @@
 
-import fept
+from mend2np.fept import fept
 
 params = {
     'metacols':{
@@ -78,4 +78,4 @@ params = {
     }
 }
 
-fept.fept(params=params,out="out_fept")
+fept(params=params,out="tests/out")

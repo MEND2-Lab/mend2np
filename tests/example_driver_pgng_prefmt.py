@@ -24,7 +24,7 @@ addtional required for timing: exp_start, stim_start, stim_dur
 
 '''
 
-import pgng
+from mend2np.pgng import pgng
 
 # params structure if data is formatted (tidy):
 params = {
@@ -50,4 +50,4 @@ params = {
     }
 }
 
-pgng.main(params=params,formatted=True,cov=True,out="out",filelist="filepaths.txt")
+pgng(params=params,formatted=True,cov=True,out="tests/out",filelist="filepaths.txt")

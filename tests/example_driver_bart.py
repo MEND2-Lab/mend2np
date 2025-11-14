@@ -1,7 +1,7 @@
 '''
 '''
 
-import bart
+from mend2np.bart import bart
 
 params = {
     'metacols':{
@@ -21,4 +21,4 @@ params = {
     }
 }
 
-bart.bart(params=params,out='bart/out')
+bart(params=params,out='tests/out')
