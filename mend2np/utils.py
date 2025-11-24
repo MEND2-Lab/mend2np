@@ -74,13 +74,13 @@ def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str='',exp_na
         filename = filename + f'.{filetype}'
         df.to_csv(os.path.join(out,filename),index=False,sep=sep)
 
-def handle_multiple_responses(value) -> str|float|int|None:
+def handle_multiple_responses(value, slice_index=0) -> str|float|int|None:
     # if string representation of a list, and list is not empty, keep only the first value of list
     if isinstance(value,str) and re.match(r'^\[.*\]$',value):
         eval_value = literal_eval(value)
         if isinstance(eval_value,list):
             if len(eval_value) > 0:
-                return eval_value[0]
+                return eval_value[slice_index]
             else:
                 return None
     else:

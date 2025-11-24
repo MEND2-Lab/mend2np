@@ -95,8 +95,12 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     for resp_col in ['response','rt']:
         if resp_col in fmtdf.columns:
             # if string representation of a list, and list is not empty, keep only the first value of list
-            fmtdf[resp_col] = fmtdf[resp_col].apply(handle_multiple_responses)
+            fmtdf[resp_col] = fmtdf[resp_col].apply(lambda x: handle_multiple_responses(x, slice_index=slice(None)))
 
+    # get delta between response times
+    fmtdf['rt'] = fmtdf['rt'].apply(lambda lst: [lst[0]] + [lst[i] - lst[i-1] for i in range(1, len(lst))])
+
+    # coerce pooped to boolean
     fmtdf['popped'] = fmtdf['popped'].astype(bool)
 
     return fmtdf
@@ -109,10 +113,14 @@ def score_df(df:pd.DataFrame):
     ptrials_unpopped: proportion of trials in which the balloon was not popped
     mean_pumps_popped: average number of pumps for popped trials
     mean_pumps_unpopped: average number of pumps for unpopped trials
+    mean_rt_unpopped: average response time of all pumps in unpopped trials
+    sd_rt_unpopped: standard deviation of response time of all pumps in unpopped trials
     total_earnings: total earnings
     mean_earnings: average earnings
     popped_ratio: ntrials_popped / ntrials_unpopped
     post_failure_mean_pumps: average pumps on trials after exploded balloons
+    post_failure_mean_rt: average response time on trials after exploded balloons
+    post_failure_sd_rt: standard deviation of response time on trials after exploded balloons
     intertrial_variability: standard deviation of total pumps divided by the mean of total pumps
     post_pumps_loss: calculated by averaging the difference between the number of pumps on a loss trial and the immediate subsequent trial where participants elected to collect money prior to a balloon pop
     '''
@@ -125,11 +133,15 @@ def score_df(df:pd.DataFrame):
         'ptrials_unpopped':sum(~df['popped'])/len(df['popped']),
         'mean_pumps_popped':df.loc[df['popped'],'nPumps'].mean(),
         'mean_pumps_unpopped':df.loc[~df['popped'],'nPumps'].mean(),
+        'mean_rt_unpopped': df.loc[~df['popped'],'rt'].explode().mean(),
+        'sd_rt_unpopped':df.loc[~df['popped'],'rt'].explode().std(),
         'total_earnings':df['earnings'].sum(),
         'mean_earnings':df['earnings'].mean(),
         'intertrial_variability':df.loc[:,'nPumps'].std() / df.loc[:,'nPumps'].mean(),
         'post_failure_mean_pumps':df.shift(-1).loc[df['popped'],'nPumps'].mean(),
-        'post_pumps_loss': (df['nPumps'].shift(-1) - df['nPumps']).loc[df['popped'] & (df['popped'].shift(-1) == False)].mean()
+        'post_failure_mean_rt':df.shift(-1).loc[df['popped'],'rt'].explode().mean(),
+        'post_failure_sd_rt':df.shift(-1).loc[df['popped'],'rt'].explode().std(),
+        'post_pumps_loss': (df['nPumps'] - df['nPumps'].shift(-1)).loc[df['popped'] & (df['popped'].shift(-1) == False)].mean()
     },
     index=[0])
 

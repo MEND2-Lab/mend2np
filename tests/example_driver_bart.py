@@ -17,7 +17,8 @@ params = {
         'nPumps':'nPumps',
         'popped':'popped',
         'earnings':'earnings',
-        'trial':'real_trials.thisN'
+        'trial':'real_trials.thisN',
+        'rt':'mouse.time'
     }
 }
 
