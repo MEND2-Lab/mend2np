@@ -106,25 +106,33 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
 
 def score_df(df:pd.DataFrame):
     '''
-    number popped
-    number not popped
-    proportion popped
-    proportion not popped
-    average number of pumps for popped trials
-    average number of pumps for unpopped trials
-    total earnings
-    average earnings
+    ntrials_popped: number of trials in which the balloon was popped
+    ntrials_unpopped: number of trials in which the balloon was not popped
+    ptrials_popped: proportion of trials in which the balloon was popped
+    ptrials_unpopped: proportion of trials in which the balloon was not popped
+    mean_pumps_popped: average number of pumps for popped trials
+    mean_pumps_unpopped: average number of pumps for unpopped trials
+    total_earnings: total earnings
+    mean_earnings: average earnings
+    popped_ratio: ntrials_popped / ntrials_unpopped
+    post_failure_mean_pumps: average pumps on trials after exploded balloons
+    intertrial_variability: standard deviation of total pumps divided by the mean of total pumps
+    post_pumps_loss: calculated by averaging the difference between the number of pumps on a loss trial and the immediate subsequent trial where participants elected to collect money prior to a balloon pop
     '''
 
     scores = pd.DataFrame({
         'ntrials_popped':sum(df['popped']),
         'ntrials_unpopped':sum(~df['popped']),
+        'popped_ratio':sum(df['popped'])/sum(~df['popped']),
         'ptrials_popped':sum(df['popped'])/len(df['popped']),
         'ptrials_unpopped':sum(~df['popped'])/len(df['popped']),
         'mean_pumps_popped':df.loc[df['popped'],'nPumps'].mean(),
         'mean_pumps_unpopped':df.loc[~df['popped'],'nPumps'].mean(),
         'total_earnings':df['earnings'].sum(),
-        'mean_earnings':df['earnings'].mean()
+        'mean_earnings':df['earnings'].mean(),
+        'intertrial_variability':df.loc[:,'nPumps'].std() / df.loc[:,'nPumps'].mean(),
+        'post_failure_mean_pumps':df.shift(-1).loc[df['popped'],'nPumps'].mean(),
+        'post_pumps_loss':(df['nPumps'] - df['nPumps'].shift(-1)).loc[df['popped'] & ~df.shift(-1)['popped']].mean()
     },
     index=[0])
 
