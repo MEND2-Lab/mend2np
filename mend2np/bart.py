@@ -9,8 +9,8 @@ import pandas as pd
 import numpy as np
 from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
 
-def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=False, score:bool=True,
-         log=20, verbose:bool=False):
+def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=False,log=20,
+         verbose:bool=False):
 
     os.makedirs(out, exist_ok=True)
 
@@ -39,8 +39,7 @@ def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=
 
     # initiate combined files
     combined_trials = pd.DataFrame()
-    if score:
-        combined_scores = pd.DataFrame()
+    combined_scores = pd.DataFrame()
 
     # loop through data files
     for filepath in filepaths:
@@ -58,23 +57,21 @@ def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=
 
             combined_trials = pd.concat([combined_trials,df],axis=0,ignore_index=True)
 
-            if score:
-                this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
-                this_row.insert(1,'filename',filename)
-                combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
+            this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
+            this_row.insert(1,'filename',filename)
+            combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
 
         except Exception as e:
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
 
     if not combined_trials.empty:
         write_out(combined_trials,out,True,'csv','trials')
-    if score and not combined_scores.empty:
+    if not combined_scores.empty:
         write_out(combined_scores,out,True,'csv','scores')
     
     logger.info('end')
 
-    if score:
-        return combined_scores
+    return combined_scores
 
 def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     '''
@@ -132,7 +129,7 @@ def score_df(df:pd.DataFrame):
         'mean_earnings':df['earnings'].mean(),
         'intertrial_variability':df.loc[:,'nPumps'].std() / df.loc[:,'nPumps'].mean(),
         'post_failure_mean_pumps':df.shift(-1).loc[df['popped'],'nPumps'].mean(),
-        'post_pumps_loss':(df['nPumps'] - df['nPumps'].shift(-1)).loc[df['popped'] & ~df.shift(-1)['popped']].mean()
+        'post_pumps_loss': (df['nPumps'].shift(-1) - df['nPumps']).loc[df['popped'] & (df['popped'].shift(-1) == False)].mean()
     },
     index=[0])
 

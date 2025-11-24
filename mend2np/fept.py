@@ -10,8 +10,7 @@ import traceback
 import sys
 from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
 
-def fept(params:dict, formatted:bool=False, score=True, out:str=os.getcwd(), filelist:str|list='', 
-         log:int|str=20, ind:bool=False):
+def fept(params:dict, formatted:bool=False, out:str=os.getcwd(), filelist:str|list='', log:int|str=20, ind:bool=False):
     '''
     '''
 
@@ -44,8 +43,7 @@ def fept(params:dict, formatted:bool=False, score=True, out:str=os.getcwd(), fil
 
     # initiate combined files
     #combined_trials = pd.DataFrame()
-    if score:
-        combined_scores = pd.DataFrame()
+    combined_scores = pd.DataFrame()
 
     # loop through data files
     for filepath in filepaths:
@@ -63,27 +61,25 @@ def fept(params:dict, formatted:bool=False, score=True, out:str=os.getcwd(), fil
                 if ind:
                     write_out(df,out,False,'csv')
 
-            if score:
-                this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
-                this_row.insert(1,'filename',filename)
-                combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
+            this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
+            this_row.insert(1,'filename',filename)
+            combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
 
         except Exception as e:
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
-            print("see log file for errors")
+            #print("see log file for errors")
             continue
     
     try:
         # if not combined_trials.empty:
         #     write_out(combined_trials,out,True,'csv','trials')
-        if score and not combined_scores.empty:
+        if not combined_scores.empty:
             write_out(combined_scores,out,True,'csv','scores')
     except Exception as e:
         logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
-        print("see log file for errors")
+        #print("see log file for errors")
 
-    if score:
-        return combined_scores
+    return combined_scores
 
 def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     '''
