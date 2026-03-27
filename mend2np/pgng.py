@@ -207,8 +207,6 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
             elif platform == 'eprime':
                 mask = df[params['blocks'][block]['cols']['block']] == int(block)
 
-            print(any(mask))
-
             for metacol in params['metacols']:
                 if params['metacols'][metacol]:
                     tmpdf[metacol] = df.loc[mask,params['metacols'][metacol]]
@@ -241,18 +239,18 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
 
             # clean & validate numeric columns
             for num_col in ['rt', 'exp_start', 'stim_start', 'stim_dur', 'rt_global']:
-                if num_col in tmpdf.columns:
-                    if is_string_dtype(tmpdf[num_col]):
-                        tmpdf[num_col] = tmpdf[num_col].str.replace(r'[^\d.]', '', regex=True)
-                        tmpdf[num_col] = pd.to_numeric(tmpdf[num_col], errors='coerce')
-                    # if numbers are in miliseconds (as in eprime), convert to seconds
-                    if platform == 'eprime':
-                        tmpdf[num_col] = tmpdf[num_col]/1000
+                if num_col in tmpdf.columns and is_string_dtype(tmpdf[num_col]):
+                    tmpdf[num_col] = tmpdf[num_col].str.replace(r'[^\d.]', '', regex=True)
+                    tmpdf[num_col] = pd.to_numeric(tmpdf[num_col], errors='coerce')
 
+            # convert miliseconds to seconds
+            if platform == 'eprime':
+                for num_col in ['exp_start','rt','rt_global']:
+                    tmpdf[num_col] = tmpdf[num_col]/1000        
 
             # if stim_start does not exist, estimate it
             if not 'stim_start' in tmpdf.columns and 'exp_start' in tmpdf.columns and 'stim_dur' in tmpdf.columns:
-                tmpdf['stim_start'] = np.arange(tmpdf['exp_start'].values[0]+tmpdf['start_delta'].values[0], tmpdf['exp_start'].values[0] + (len(tmpdf)*tmpdf['stim_dur'].values[0]), tmpdf['stim_dur'].values[0])
+                tmpdf['stim_start'] = np.arange(tmpdf['exp_start'].values[0]+tmpdf['start_delta'].values[0], tmpdf['exp_start'].values[0] + len(tmpdf)*tmpdf['stim_dur'].values[0], tmpdf['stim_dur'].values[0])
 
             #tmpdf['block'] = block
             if platform == 'pavlovia':
