@@ -71,7 +71,9 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
             # read data
             df = pd.read_csv(filepath)
 
-            # if pavlovia data aren't already formatted properly
+            print(df)
+
+            # if data aren't already formatted properly
             if not formatted:
                 df = format_df(df,params,platform)
 
@@ -207,6 +209,8 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
             elif platform == 'eprime':
                 mask = df[params['blocks'][block]['cols']['block']] == block
 
+            print(mask)
+
             for metacol in params['metacols']:
                 if params['metacols'][metacol]:
                     tmpdf[metacol] = df.loc[mask,params['metacols'][metacol]]
@@ -228,6 +232,8 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
             # for gs, update stim_dur to correct times
             if 'stop_time' in params['blocks'][block]['cols']:
                 tmpdf['stim_dur'] = df.loc[mask,params['blocks'][block]['cols']['stop_time']]
+
+            print(tmpdf)
 
             # handle multiple responses for touchscreen-based versions
             for resp_col in ['response','rt','rt_global']:
