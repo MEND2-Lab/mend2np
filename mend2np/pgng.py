@@ -12,8 +12,17 @@ from pandas.api.types import is_string_dtype
 from mend2np.utils import setup_logger, select_files, parse_files, write_out, get_meta_cols, handle_multiple_responses
 
 def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.getcwd(), 
-         filelist:str|list='', log=20, ind:bool=False, verbose:bool=False):
+         filelist:str|list='', log=20, ind:bool=False, verbose:bool=False, platform:str='psychopy'):
     '''
+    :params:
+    :formatted: are the data already in tidy, item-level format with standardized column names? default False
+    :out: directory to write output
+    :filelist: list of files to be processed. can be passed as a Python list of filepath strings or a single filepath string. 
+        If left blank, will prompt to select files via GUI
+    :log: log level, default 20 (INFO)
+    :ind: generate individual output files
+    :verbose: print more stuff
+    :platform: Experiment generation plaform the data originate from, one of: 'psychopy', 'eprime'
     '''
 
     # make output directory
@@ -62,9 +71,9 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
             # read data
             df = pd.read_csv(filepath)
 
-            # if the data aren't already formatted properly
+            # if pavlovia data aren't already formatted properly
             if not formatted:
-                df = format_df(df,params)
+                df = format_df(df,params,platform)
 
             if not check_cols(df):
                 logger.error('columns misspecified, skipping this file')
@@ -164,11 +173,10 @@ def check_timging_cols(df:pd.DataFrame) -> bool:
     addtional required for timing: exp_start, stim_start, stim_dur
     '''
 
-    # TODO: make it possible to use stim_start OR stim_dur
-
+    timing_cols = ['exp_start','stim_start','stim_dur']
     all_good = True
 
-    for var in ['exp_start','stim_start','stim_dur']:
+    for var in timing_cols:
         if var not in df.columns:
             all_good = False
             logger.debug(f'column {var} not in dataset, will proceed without timing calcs')
@@ -183,7 +191,7 @@ def check_timging_cols(df:pd.DataFrame) -> bool:
         
     return all_good
 
-def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
+def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
     '''
     '''
 
@@ -194,7 +202,10 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
         tmpdf = pd.DataFrame()
 
         try:
-            mask = np.invert(df[params['blocks'][block]['cols']['trial']].isna())
+            if platform == 'pavlovia':
+                mask = np.invert(df[params['blocks'][block]['cols']['trial']].isna())
+            elif platform == 'eprime':
+                mask = df[params['blocks'][block]['cols']['block']] == block
 
             for metacol in params['metacols']:
                 if params['metacols'][metacol]:
@@ -219,18 +230,24 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
                 tmpdf['stim_dur'] = df.loc[mask,params['blocks'][block]['cols']['stop_time']]
 
             # handle multiple responses for touchscreen-based versions
-            for resp_col in ['response','rt']:
+            for resp_col in ['response','rt','rt_global']:
                 if resp_col in tmpdf.columns:
                     # if string representation of a list, and list is not empty, keep only the first value of list
                     tmpdf[resp_col] = tmpdf[resp_col].apply(handle_multiple_responses)
 
             # clean & validate numeric columns
-            for num_col in ['rt', 'exp_start', 'stim_start', 'stim_dur']:
+            for num_col in ['rt', 'exp_start', 'stim_start', 'stim_dur', 'rt_global']:
                 if num_col in tmpdf.columns and is_string_dtype(tmpdf[num_col]):
                     tmpdf[num_col] = tmpdf[num_col].str.replace(r'[^\d.]', '', regex=True)
                     tmpdf[num_col] = pd.to_numeric(tmpdf[num_col], errors='coerce')
 
-            tmpdf['block'] = block
+            # if stim_start does not exist, estimate it
+            if not 'stim_start' in tmpdf.columns and 'exp_start' in tmpdf.columns and 'stim_dur' in tmpdf.columns:
+                tmpdf['stim_start'] = range(tmpdf['exp_start'].values[0], tmpdf['exp_start'].values[0] + (len(tmpdf)*tmpdf['stim_dur'].values[0]), tmpdf['stim_dur'].values[0])
+
+            #tmpdf['block'] = block
+            if platform == 'pavlovia':
+                tmpdf['block'] = block
 
         except Exception as e:
             logger.error(f"{e}\n{traceback.format_exc()}\n")
