@@ -250,7 +250,7 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
 
             # if stim_start does not exist, estimate it
             if not 'stim_start' in tmpdf.columns and 'exp_start' in tmpdf.columns and 'stim_dur' in tmpdf.columns:
-                tmpdf['stim_start'] = np.arange(tmpdf['exp_start'].values[0]+tmpdf['start_delta'].values[0], tmpdf['exp_start'].values[0] + len(tmpdf)*tmpdf['stim_dur'].values[0], tmpdf['stim_dur'].values[0])
+                tmpdf['stim_start'] = np.arange(tmpdf['exp_start'].values[0]+tmpdf['start_delta'].values[0], tmpdf['exp_start'].values[0]+tmpdf['start_delta'].values[0]+(len(tmpdf)*tmpdf['stim_dur'].values[0]), tmpdf['stim_dur'].values[0])
 
             #tmpdf['block'] = block
             if platform == 'pavlovia':
