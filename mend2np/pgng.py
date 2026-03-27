@@ -71,8 +71,6 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
             # read data
             df = pd.read_csv(filepath)
 
-            print(df)
-
             # if data aren't already formatted properly
             if not formatted:
                 df = format_df(df,params,platform)
@@ -207,9 +205,9 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
             if platform == 'pavlovia':
                 mask = np.invert(df[params['blocks'][block]['cols']['trial']].isna())
             elif platform == 'eprime':
-                mask = df[params['blocks'][block]['cols']['block']] == block
+                mask = df[params['blocks'][block]['cols']['block']] == int(block)
 
-            print(mask)
+            print(any(mask))
 
             for metacol in params['metacols']:
                 if params['metacols'][metacol]:
