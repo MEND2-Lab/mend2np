@@ -241,10 +241,17 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
                     tmpdf[num_col] = tmpdf[num_col].str.replace(r'[^\d.]', '', regex=True)
                     tmpdf[num_col] = pd.to_numeric(tmpdf[num_col], errors='coerce')
 
-            # convert miliseconds to seconds
+            # eprime: convert miliseconds to seconds, non-response rt as np.nan
             if platform == 'eprime':
-                for num_col in ['exp_start','rt','rt_global']:
-                    tmpdf[num_col] = tmpdf[num_col]/1000        
+                if 'exp_start' in tmpdf.columns:
+                    tmpdf['exp_start'] = tmpdf['exp_start']/1000
+                
+                for rt_col in ['rt','rt_global']:
+                    if rt_col in tmpdf.columns:
+                        tmpdf[rt_col] = tmpdf[rt_col]/1000
+                        for i, row in tmpdf.iterrows():
+                            if tmpdf.loc[i,'response'] != tmpdf.loc[i,'resp_key'] and tmpdf.loc[i,rt_col] == 0:
+                                tmpdf.loc[i,rt_col] = np.nan
 
             # if stim_start does not exist, estimate it
             if not 'stim_start' in tmpdf.columns and 'exp_start' in tmpdf.columns and 'stim_dur' in tmpdf.columns:
