@@ -231,7 +231,7 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
                         tmpdf[metavar] = [params['blocks'][block]['metavars'][metavar]] * len(tmpdf)
                     # convert response key parameter to list
                     elif metavar == 'resp_key':
-                        tmpdf[metavar] = params['blocks'][block]['metavars'][metavar] if isinstance(params['blocks'][block]['metavars'][metavar], list) else [params['blocks'][block]['metavars'][metavar]]
+                        tmpdf[metavar] = [params['blocks'][block]['metavars'][metavar] if isinstance(params['blocks'][block]['metavars'][metavar], list) else [params['blocks'][block]['metavars'][metavar]]] * len(tmpdf)
                     else:
                         tmpdf[metavar] = params['blocks'][block]['metavars'][metavar]
 
