@@ -159,16 +159,16 @@ def check_cols(df:pd.DataFrame) -> bool:
             all_good = False
             logger.warning(f'column "rt" is not numeric')
 
-        # check if reponse & rt columns have compatible data types for comparison
-        if (is_numeric_dtype(df['response']) and is_string_dtype(df['rt'])) or \
-        (is_string_dtype(df['response']) and is_numeric_dtype(df['rt'])):
+        # check if response & resp_key columns have compatible data types for comparison
+        #if (is_numeric_dtype(df['response']) and is_string_dtype(df['rt'])) or \
+        #(is_string_dtype(df['response']) and is_numeric_dtype(df['rt'])):
+        if not all(isinstance(x, type(df.loc[0,'response'])) for x in df.loc[0,'resp_key']):
             all_good = False
-            logger.warning(f'columns "response" and "resp_key" have incompatible data types\n \
-                        response dtype: {df["response"].dtype}, rt dtype: {df["resp_key"].dtype}')
+            logger.warning('columns "response" and "resp_key" have incompatible data types')
 
         if not isinstance(df['stim_targ_names'].head(1).values[0],list):
             all_good = False
-            logger.warning(f'column "stim_targ_names" does not contain lists of target names')
+            logger.warning('column "stim_targ_names" does not contain lists of target names')
 
         for s in df['type'].unique():
             if s not in ['go','gng','gs']:
@@ -229,6 +229,9 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
                 if params['blocks'][block]['metavars'][metavar]:
                     if metavar == 'stim_targ_names':
                         tmpdf[metavar] = [params['blocks'][block]['metavars'][metavar]] * len(tmpdf)
+                    # convert response key parameter to list
+                    elif metavar == 'resp_key':
+                        tmpdf[metavar] = params['blocks'][block]['metavars'][metavar] if isinstance(params['blocks'][block]['metavars'][metavar], list) else [params['blocks'][block]['metavars'][metavar]]
                     else:
                         tmpdf[metavar] = params['blocks'][block]['metavars'][metavar]
 
@@ -260,7 +263,7 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
                     if rt_col in tmpdf.columns:
                         tmpdf[rt_col] = tmpdf[rt_col]/1000
                         for i, row in tmpdf.iterrows():
-                            if tmpdf.loc[i,'response'] != tmpdf.loc[i,'resp_key'] and tmpdf.loc[i,rt_col] == 0:
+                            if tmpdf.loc[i,'response'] not in tmpdf.loc[i,'resp_key'] and tmpdf.loc[i,rt_col] == 0:
                                 tmpdf.loc[i,rt_col] = np.nan
 
             # if stim_start does not exist, estimate it
@@ -374,11 +377,11 @@ def resp_go(block:pd.DataFrame) -> pd.Series:
 
     for i, row in block.iterrows():
         if block.loc[i,'stim_class'] == 'target':
-            if block.loc[i,'response'] == block.loc[i,'resp_key'] or block.loc[i+1,'response'] == block.loc[i+1,'resp_key']:
+            if block.loc[i,'response'] in block.loc[i,'resp_key'] or block.loc[i+1,'response'] in block.loc[i+1,'resp_key']:
                 block.loc[i,'resp_class'] = 'hit'
             else:
                 block.loc[i,'resp_class'] = 'om'
-        elif i>0 and block.loc[i-1,'stim_class'] != 'target' and block.loc[i,'response'] == block.loc[i,'resp_key']:
+        elif i>0 and block.loc[i-1,'stim_class'] != 'target' and block.loc[i,'response'] in block.loc[i,'resp_key']:
             block.loc[i,'resp_class'] = 'randcom'
         else:
             block.loc[i,'resp_class'] = ''
@@ -391,7 +394,7 @@ def resp_gng(block:pd.DataFrame) -> pd.Series:
     missed = False
     for i, row in block.iterrows():
         if block.loc[i,'stim_class'] == 'target':
-            if block.loc[i,'response'] == block.loc[i,'resp_key'] or block.loc[i+1,'response'] == block.loc[i+1,'resp_key']:
+            if block.loc[i,'response'] in block.loc[i,'resp_key'] or block.loc[i+1,'response'] in block.loc[i+1,'resp_key']:
                 block.loc[i,'resp_class'] = 'hit'
                 missed = False
             else:
@@ -400,11 +403,11 @@ def resp_gng(block:pd.DataFrame) -> pd.Series:
         elif block.loc[i,'stim_class'] == 'lure':
             if missed:
                 block.loc[i,'resp_class'] = 'mo'
-            elif block.loc[i,'response'] == block.loc[i,'resp_key'] or block.loc[i+1,'response'] == block.loc[i+1,'resp_key']:
+            elif block.loc[i,'response'] in block.loc[i,'resp_key'] or block.loc[i+1,'response'] in block.loc[i+1,'resp_key']:
                 block.loc[i,'resp_class'] = 'com'
             else:
                 block.loc[i,'resp_class'] = 'rej'
-        elif i>0 and block.loc[i-1,'stim_class'] not in ['target','lure'] and block.loc[i,'response'] == block.loc[i,'resp_key']:
+        elif i>0 and block.loc[i-1,'stim_class'] not in ['target','lure'] and block.loc[i,'response'] in block.loc[i,'resp_key']:
             block.loc[i,'resp_class'] = 'randcom'
         else:
             block.loc[i,'resp_class'] = ''
@@ -416,18 +419,18 @@ def resp_gs(block:pd.DataFrame) -> pd.Series:
     '''
     for i, row in block.iterrows():
         if block.loc[i,'stim_class'] == 'target':
-            if block.loc[i,'response'] == block.loc[i,'resp_key'] or block.loc[i+1,'response'] == block.loc[i+1,'resp_key']:
+            if block.loc[i,'response'] in block.loc[i,'resp_key'] or block.loc[i+1,'response'] in block.loc[i+1,'resp_key']:
                 block.loc[i,'resp_class'] = 'hit'
             else:
                 block.loc[i,'resp_class'] = 'om'
         elif block.loc[i,'stim_class'] == 'lure':
-            if block.loc[i,'response'] == block.loc[i,'resp_key'] or block.loc[i+1,'response'] == block.loc[i+1,'resp_key'] \
-                or block.loc[i+2,'response'] == block.loc[i+2,'resp_key']:
+            if block.loc[i,'response'] in block.loc[i,'resp_key'] or block.loc[i+1,'response'] in block.loc[i+1,'resp_key'] \
+                or block.loc[i+2,'response'] in block.loc[i+2,'resp_key']:
                 block.loc[i,'resp_class'] = 'com'
             else:
                 block.loc[i,'resp_class'] = 'rej'
         elif i>1 and block.loc[i-1,'stim_class'] not in ['target','lure'] and block.loc[i-2,'stim_class'] not in ['target','lure'] \
-            and block.loc[i,'response'] == block.loc[i,'resp_key']:
+            and block.loc[i,'response'] in block.loc[i,'resp_key']:
             block.loc[i,'resp_class'] = 'randcom'
         else:
             block.loc[i,'resp_class'] = ''
