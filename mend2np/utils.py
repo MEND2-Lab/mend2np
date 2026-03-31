@@ -9,15 +9,14 @@ from datetime import datetime
 from tkinter import filedialog as fd
 from ast import literal_eval
 
-def setup_logger(name:str='root', out:str='out', level:int|str=20, verbose:bool=False):
+def setup_logger(name:str='root', out:str='out', level:int|str=20):
     logger = logging.getLogger(name)
     logger.setLevel(level)
     datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')
     formatter = logging.Formatter(fmt='%(asctime)s : %(levelname)s : %(module)s : %(message)s')
-    if verbose:
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(formatter)
-        logger.addHandler(stream_handler)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
     file_handler = logging.FileHandler(os.path.join(out,f'log_{datetime_string}.log'),mode='w')
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)

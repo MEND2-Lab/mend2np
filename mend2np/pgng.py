@@ -12,7 +12,7 @@ from pandas.api.types import is_string_dtype
 from mend2np.utils import setup_logger, select_files, parse_files, write_out, get_meta_cols, handle_multiple_responses
 
 def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.getcwd(), 
-         filelist:str|list='', log=20, ind:bool=False, verbose:bool=False, platform:str='psychopy'):
+         filelist:str|list='', log=20, ind:bool=False, platform:str='psychopy'):
     '''
     :params:
     :formatted: are the data already in tidy, item-level format with standardized column names? default False
@@ -21,7 +21,6 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
         If left blank, will prompt to select files via GUI
     :log: log level, default 20 (INFO)
     :ind: generate individual output files
-    :verbose: print more stuff
     :platform: Experiment generation plaform the data originate from, one of: 'psychopy', 'eprime'
     '''
 
@@ -30,7 +29,7 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
 
     # initiate logger
     global logger
-    logger = setup_logger(name='root',out=out,level=log,verbose=verbose)
+    logger = setup_logger(name='root',out=out,level=log)
     logger.info("start")
     
     # sort how the file list was passed
@@ -58,6 +57,8 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
     if not np.isnan(cov_window):
         combined_cov = pd.DataFrame()
 
+    logger.debug(f'Number of files selected: {len(filepaths)}')
+
     # loop through data files
     for filepath in filepaths:
         #print(filepath)
@@ -71,28 +72,36 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
             # read data
             df = pd.read_csv(filepath)
 
+            logger.debug(f'Dataframe info:\n{df.info()}')
+
             # if data aren't already formatted properly
             if not formatted:
                 df = format_df(df,params,platform)
+                logger.debug(f'Formatted dataframe info:\n{df.info()}')
 
             if not check_cols(df):
                 logger.error('columns misspecified, skipping this file')
 
             # add event columns
             df = events_df(df)
+            logger.debug(f'Dataframe + events info:\n{df.info()}')
             
             # add adjusted rt column
             df = rt_adj(df)
+            logger.debug(f'Dataframe + rt_adj info:\n{df.info()}')
 
             # add onset columns
             if check_timging_cols(df):
                 df = onsets(df)
+                logger.debug(f'Dataframe + onsets info:\n{df.info()}')
 
             df.insert(1,'filename',filename)
 
             # write individual file if requested
             if ind:
                 write_out(df,out,False,'tsv')
+
+            logger.debug(f'Individual, item-level dataframe info:\n{df.info()}')
 
             combined_trials = pd.concat([combined_trials,df],axis=0,ignore_index=True)
         
@@ -144,26 +153,27 @@ def check_cols(df:pd.DataFrame) -> bool:
             logger.warning(f'required scoring column {var} is empty')
             continue
 
-    # additional checks
-    if not is_numeric_dtype(df['rt']):
-        all_good = False
-        logger.warning(f'column "rt" is not numeric')
-
-    # check if reponse & rt columns have compatible data types for comparison
-    if (is_numeric_dtype(df['response']) and is_string_dtype(df['rt'])) or \
-    (is_string_dtype(df['response']) and is_numeric_dtype(df['rt'])):
-        all_good = False
-        logger.warning(f'columns "response" and "resp_key" have incompatible data types\n \
-                       response dtype: {df["response"].dtype}, rt dtype: {df["resp_key"].dtype}')
-
-    if not isinstance(df['stim_targ_names'].head(1).values[0],list):
-        all_good = False
-        logger.warning(f'column "stim_targ_names" does not contain lists of target names')
-
-    for s in df['type'].unique():
-        if s not in ['go','gng','gs']:
+    if all_good:
+        # additional checks
+        if not is_numeric_dtype(df['rt']):
             all_good = False
-            logger.warning('values in the column "type" need to be one of ["go","gng","gs"]')
+            logger.warning(f'column "rt" is not numeric')
+
+        # check if reponse & rt columns have compatible data types for comparison
+        if (is_numeric_dtype(df['response']) and is_string_dtype(df['rt'])) or \
+        (is_string_dtype(df['response']) and is_numeric_dtype(df['rt'])):
+            all_good = False
+            logger.warning(f'columns "response" and "resp_key" have incompatible data types\n \
+                        response dtype: {df["response"].dtype}, rt dtype: {df["resp_key"].dtype}')
+
+        if not isinstance(df['stim_targ_names'].head(1).values[0],list):
+            all_good = False
+            logger.warning(f'column "stim_targ_names" does not contain lists of target names')
+
+        for s in df['type'].unique():
+            if s not in ['go','gng','gs']:
+                all_good = False
+                logger.warning('values in the column "type" need to be one of ["go","gng","gs"]')
     
     return all_good
         
