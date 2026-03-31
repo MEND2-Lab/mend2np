@@ -162,9 +162,9 @@ def check_cols(df:pd.DataFrame) -> bool:
         # check if response & resp_key columns have compatible data types for comparison
         #if (is_numeric_dtype(df['response']) and is_string_dtype(df['rt'])) or \
         #(is_string_dtype(df['response']) and is_numeric_dtype(df['rt'])):
-        if not all(isinstance(x, type(df.loc[0,'response'])) for x in df.loc[0,'resp_key']):
-            all_good = False
-            logger.warning('columns "response" and "resp_key" have incompatible data types')
+        #if not all(isinstance(x, type(df.loc[0,'response'])) for x in df.loc[0,'resp_key']):
+        #    all_good = False
+        #    logger.warning('columns "response" and "resp_key" have incompatible data types')
 
         if not isinstance(df['stim_targ_names'].head(1).values[0],list):
             all_good = False
