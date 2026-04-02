@@ -110,7 +110,11 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
             # make some score output
             this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
             this_row.insert(1,'filename',filename)
+            
+            logger.debug(f'Scores row: {this_row}')
+            
             combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
+            
             if not np.isnan(cov_window):
                 this_row = pd.concat([get_meta_cols(df,params),cov_df(df,window_duration=cov_window)],axis=1,ignore_index=True)
                 combined_cov = pd.concat([combined_cov,this_row],axis=0,ignore_index=True)
