@@ -216,7 +216,7 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
         tmpdf = pd.DataFrame()
 
         try:
-            if platform == 'pavlovia':
+            if platform == 'psychopy':
                 mask = np.invert(df[params['blocks'][block]['cols']['trial']].isna())
             elif platform == 'eprime':
                 mask = df[params['blocks'][block]['cols']['block']] == int(block)
@@ -276,7 +276,7 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
                 tmpdf['stim_start'] = stim_start_vals[0:len(tmpdf)]
 
             #tmpdf['block'] = block
-            if platform == 'pavlovia':
+            if platform == 'psychopy':
                 tmpdf['block'] = block
 
         except Exception as e:
