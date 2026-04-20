@@ -10,7 +10,7 @@ import numpy as np
 from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
 
 def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=False,log=20,
-         verbose:bool=False):
+         verbose:bool=False, trial_filter:str=''):
 
     os.makedirs(out, exist_ok=True)
 
@@ -57,7 +57,7 @@ def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=
 
             combined_trials = pd.concat([combined_trials,df],axis=0,ignore_index=True)
 
-            this_row = pd.concat([get_meta_cols(df,params),score_df(df)],axis=1)
+            this_row = pd.concat([get_meta_cols(df,params),score_df(df,trial_filter)],axis=1)
             this_row.insert(1,'filename',filename)
             combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
 
@@ -105,7 +105,7 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
 
     return fmtdf
 
-def score_df(df:pd.DataFrame):
+def score_df(df:pd.DataFrame, trial_filter):
     '''
     ntrials_popped: number of trials in which the balloon was popped
     ntrials_unpopped: number of trials in which the balloon was not popped
@@ -124,6 +124,9 @@ def score_df(df:pd.DataFrame):
     intertrial_variability: standard deviation of total pumps divided by the mean of total pumps
     post_pumps_loss: calculated by averaging the difference between the number of pumps on a loss trial and the immediate subsequent trial where participants elected to collect money prior to a balloon pop
     '''
+
+    if trial_filter and 'trial_type' in df.columns:
+        df = df.loc[df['trial_type']==trial_filter]
 
     scores = pd.DataFrame({
         'ntrials_popped':sum(df['popped']),
