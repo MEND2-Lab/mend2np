@@ -10,12 +10,12 @@ import numpy as np
 from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
 
 def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=False,log=20,
-         verbose:bool=False, trial_filter:str=''):
+         trial_filter:str=''):
 
     os.makedirs(out, exist_ok=True)
 
     global logger
-    logger = setup_logger(name='root',out=out,level=log,verbose=verbose)
+    logger = setup_logger(name='root',out=out,level=log)
     logger.info('start')
 
     # sort how the file list was passed
