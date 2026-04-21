@@ -11,8 +11,8 @@ from pandas.api.types import is_numeric_dtype
 from pandas.api.types import is_string_dtype
 from mend2np.utils import setup_logger, select_files, parse_files, write_out, get_meta_cols, handle_multiple_responses
 
-def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.getcwd(), 
-         filelist:str|list='', log=20, ind:bool=False, platform:str='psychopy'):
+def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.getcwd(), write:bool=True, 
+         filelist:str|list='', log=20, ind:bool=False, platform:str='psychopy') -> tuple:
     '''
     :params:
     :formatted: are the data already in tidy, item-level format with standardized column names? default False
@@ -123,21 +123,22 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
             #print("see log file for errors")
             continue
-        
-    try:
-        if not combined_trials.empty:
-            write_out(combined_trials,out,True,'csv','trials')
-        if not combined_scores.empty:
-            write_out(combined_scores,out,True,'csv','scores')
-        if not np.isnan(cov_window) and not combined_cov.empty:
-            write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
-    except Exception as e:
-        logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
-        #print("see log file for errors")
+
+    if write:    
+        try:
+            if not combined_trials.empty:
+                write_out(combined_trials,out,True,'csv','trials')
+            if not combined_scores.empty:
+                write_out(combined_scores,out,True,'csv','scores')
+            if not np.isnan(cov_window) and not combined_cov.empty:
+                write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
+        except Exception as e:
+            logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
+            #print("see log file for errors")
 
     logger.info('end')
     
-    return combined_scores
+    return combined_scores, combined_trials
 
 def check_cols(df:pd.DataFrame) -> bool:
     '''
@@ -223,7 +224,8 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
 
             for metacol in params['metacols']:
                 if params['metacols'][metacol]:
-                    tmpdf[metacol] = df.loc[mask,params['metacols'][metacol]]
+                    #tmpdf[metacol] = df.loc[mask,params['metacols'][metacol]]
+                    tmpdf[metacol] = df.loc[0,params['metacols'][metacol]]
             
             for col in params['blocks'][block]['cols']:
                 if params['blocks'][block]['cols'][col]:

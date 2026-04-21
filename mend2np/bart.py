@@ -9,8 +9,8 @@ import pandas as pd
 import numpy as np
 from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
 
-def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=False,log=20,
-         trial_filter:str=''):
+def bart(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False,log=20,
+         trial_filter:str='') -> tuple:
 
     os.makedirs(out, exist_ok=True)
 
@@ -64,14 +64,15 @@ def bart(params:dict, out:str=os.getcwd(), filelist:str|list='', formatted:bool=
         except Exception as e:
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
 
-    if not combined_trials.empty:
-        write_out(combined_trials,out,True,'csv','trials')
-    if not combined_scores.empty:
-        write_out(combined_scores,out,True,'csv','scores')
+    if write:
+        if not combined_trials.empty:
+            write_out(combined_trials,out,True,'csv','trials')
+        if not combined_scores.empty:
+            write_out(combined_scores,out,True,'csv','scores')
     
     logger.info('end')
 
-    return combined_scores
+    return combined_scores, combined_trials
 
 def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     '''
@@ -83,7 +84,8 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
 
     for metacol in params['metacols']:
         if params['metacols'][metacol]:
-            fmtdf[metacol] = df.loc[mask,params['metacols'][metacol]]
+            #fmtdf[metacol] = df.loc[mask,params['metacols'][metacol]]
+            fmtdf[metacol] = df.loc[0,params['metacols'][metacol]]
 
     for col in params['cols']:
         if params['cols'][col]:
