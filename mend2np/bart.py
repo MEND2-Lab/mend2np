@@ -83,14 +83,14 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     mask = np.invert(df[params['cols']['trial']].isna())
 
     for metacol in params['metacols']:
-        if params['metacols'][metacol]:
+        if params['metacols'][metacol] and params['metacols'][metacol] in df.columns:
             #fmtdf[metacol] = df.loc[mask,params['metacols'][metacol]]
             index = df[params['metacols'][metacol]].first_valid_index()
             fmtdf[metacol] = df.at[index, params['metacols'][metacol]] if index is not None else None
 
 
     for col in params['cols']:
-        if params['cols'][col]:
+        if params['cols'][col] and params['cols'][col] in df.columns:
             fmtdf[col] = df.loc[mask,params['cols'][col]]
 
     #TODO: add quality checks, data type, empty, missing cols

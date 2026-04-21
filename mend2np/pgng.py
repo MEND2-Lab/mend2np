@@ -223,13 +223,13 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
                 mask = df[params['blocks'][block]['cols']['block']] == int(block)
 
             for metacol in params['metacols']:
-                if params['metacols'][metacol]:
+                if params['metacols'][metacol] and params['metacols'][metacol] in df.columns:
                     #tmpdf[metacol] = df.loc[mask,params['metacols'][metacol]]
                     index = df[params['metacols'][metacol]].first_valid_index()
                     fmtdf[metacol] = df.at[index, params['metacols'][metacol]] if index is not None else None
             
             for col in params['blocks'][block]['cols']:
-                if params['blocks'][block]['cols'][col]:
+                if params['blocks'][block]['cols'][col] and params['blocks'][block]['cols'][col] in df.columns:
                     tmpdf[col] = df.loc[mask,params['blocks'][block]['cols'][col]]
             
             for metavar in params['blocks'][block]['metavars']:
