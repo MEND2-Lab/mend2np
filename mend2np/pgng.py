@@ -225,7 +225,8 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
             for metacol in params['metacols']:
                 if params['metacols'][metacol]:
                     #tmpdf[metacol] = df.loc[mask,params['metacols'][metacol]]
-                    tmpdf[metacol] = df.loc[0,params['metacols'][metacol]]
+                    index = df[params['metacols'][metacol]].first_valid_index()
+                    fmtdf[metacol] = df.at[index, params['metacols'][metacol]] if index is not None else None
             
             for col in params['blocks'][block]['cols']:
                 if params['blocks'][block]['cols'][col]:

@@ -85,7 +85,9 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     for metacol in params['metacols']:
         if params['metacols'][metacol]:
             #fmtdf[metacol] = df.loc[mask,params['metacols'][metacol]]
-            fmtdf[metacol] = df.loc[0,params['metacols'][metacol]]
+            index = df[params['metacols'][metacol]].first_valid_index()
+            fmtdf[metacol] = df.at[index, params['metacols'][metacol]] if index is not None else None
+
 
     for col in params['cols']:
         if params['cols'][col]:
