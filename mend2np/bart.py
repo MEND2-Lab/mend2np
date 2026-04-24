@@ -85,11 +85,11 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     for metacol in params['metacols']:
         if params['metacols'][metacol] and params['metacols'][metacol] in df.columns:
             #fmtdf[metacol] = df.loc[mask,params['metacols'][metacol]]
-            #print(metacol)
+            print(metacol)
             index = df[params['metacols'][metacol]].first_valid_index()
-            #print(index)
-            #print(df.at[index, params['metacols'][metacol]])
-            fmtdf[metacol] = df.at[index, params['metacols'][metacol]] #if index is not None else None
+            print(index)
+            print(df.loc[index, params['metacols'][metacol]])
+            fmtdf[metacol] = df.loc[index, params['metacols'][metacol]] #if index is not None else None
 
 
     for col in params['cols']:
