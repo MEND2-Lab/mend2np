@@ -101,7 +101,7 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
     # handle multiple responses for touchscreen-based versions
     for resp_col in ['response','rt']:
         if resp_col in fmtdf.columns:
-            # if string representation of a list, and list is not empty, keep only the first value of list
+            # if string representation of a list, convert to list
             fmtdf[resp_col] = fmtdf[resp_col].apply(lambda x: handle_multiple_responses(x, slice_index=slice(None)))
 
     # get delta between response times

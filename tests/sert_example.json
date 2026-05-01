@@ -1,0 +1,29 @@
+{
+    "metacols":{
+        "id":"participant",
+        "session":"session",
+        "datetime":"date",
+        "exp_name":"expName",
+        "software_version":"psychopyVersion",
+        "framerate":"frameRate",
+        "os":"OS"
+    },
+    "cols":{
+        "event_type":"eventtype",
+        "cue":"cue",
+        "correct_resp":"correct_resp",
+        "response":"stim_response.keys",
+        "rt":"stim_response.rt",
+        "trial":"trials.thisTrialN",
+        "left_choice":"LeftChoice",
+        "middle_choice":"MiddleChoice",
+        "right_choice":"RightChoice",
+        "stim_onset":"imagestim.started",
+        "stim_offset":"imagestim.stopped",
+        "iti_onset":"fixation.started",
+        "iti_offset":"fixation.stopped",
+        "iti_dur":"fixationduration",
+        "cue_dur":"cueduration",
+        "stim_with_cue_dur":"stimwithcue"
+    }
+}

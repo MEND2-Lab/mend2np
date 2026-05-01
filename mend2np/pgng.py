@@ -11,7 +11,7 @@ from pandas.api.types import is_numeric_dtype
 from pandas.api.types import is_string_dtype
 from mend2np.utils import setup_logger, select_files, parse_files, write_out, get_meta_cols, handle_multiple_responses
 
-def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.getcwd(), write:bool=True, 
+def pgng(params:dict, formatted:bool=False, out:str=os.getcwd(), write:bool=True, 
          filelist:str|list='', log=20, ind:bool=False, platform:str='psychopy') -> tuple:
     '''
     :params:
@@ -54,8 +54,8 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
     # initiate combined files
     combined_trials = pd.DataFrame()
     combined_scores = pd.DataFrame()
-    if not np.isnan(cov_window):
-        combined_cov = pd.DataFrame()
+    # if not np.isnan(cov_window):
+    #     combined_cov = pd.DataFrame()
 
     logger.debug(f'Number of files selected: {len(filepaths)}')
 
@@ -115,9 +115,9 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
             
             combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
             
-            if not np.isnan(cov_window):
-                this_row = pd.concat([get_meta_cols(df,params),cov_df(df,window_duration=cov_window)],axis=1,ignore_index=True)
-                combined_cov = pd.concat([combined_cov,this_row],axis=0,ignore_index=True)
+            # if not np.isnan(cov_window):
+            #     this_row = pd.concat([get_meta_cols(df,params),cov_df(df,window_duration=cov_window)],axis=1,ignore_index=True)
+            #     combined_cov = pd.concat([combined_cov,this_row],axis=0,ignore_index=True)
 
         except Exception as e:
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
@@ -130,8 +130,8 @@ def pgng(params:dict, formatted:bool=False, cov_window:float=np.nan, out:str=os.
                 write_out(combined_trials,out,True,'csv','trials')
             if not combined_scores.empty:
                 write_out(combined_scores,out,True,'csv','scores')
-            if not np.isnan(cov_window) and not combined_cov.empty:
-                write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
+            # if not np.isnan(cov_window) and not combined_cov.empty:
+            #     write_out(combined_cov,out,True,'csv',f'cov_{cov_window}')
         except Exception as e:
             logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
             #print("see log file for errors")
