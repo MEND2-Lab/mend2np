@@ -11,6 +11,12 @@ from math import ceil
 from pathlib import Path
 from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
 
+touch_resp_mapping = {
+    'LeftImage':1,
+    'MiddleImage':2,
+    'RightImage':3
+}
+
 def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20,
          trial_filter:str='') -> tuple:
 
@@ -102,6 +108,8 @@ def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
             # if string representation of a list, convert to list
             fmtdf[resp_col] = fmtdf[resp_col].apply(lambda x: handle_multiple_responses(x, slice_index=slice(None)))
 
+    fmtdf['response'] = fmtdf['response'].apply(lambda x: [touch_resp_mapping.get(resp, resp) for resp in x] if isinstance(x, list) else touch_resp_mapping.get(x, x))
+
     return fmtdf
 
 def add_switch_rep(df:pd.DataFrame) -> pd.DataFrame:
@@ -165,14 +173,23 @@ def parse_responses(df:pd.DataFrame) -> pd.DataFrame:
         this_correct_resp = int(row['correct_resp']) if 'correct_resp' in row else None
 
         if isinstance(this_response, list):
-            this_response = [int(resp) for resp in this_response]
+            # for each response in list, if it's a digit convert to int, else map using touch_resp_mapping, if not in mapping keep as is
+            this_response = [int(resp) if str(resp).isdigit() else touch_resp_mapping.get(resp, resp) for resp in this_response]
         else:
-            this_response = [int(this_response)] if not np.isnan(this_response) and not this_response is None else []
+            if not this_response is None:
+                if str(this_response).isdigit():
+                    this_response = int(this_response)
+                elif str(this_response).isalpha():
+                    this_response = [touch_resp_mapping.get(this_response, this_response)]
+                else:
+                    this_response = [this_response]
+            else:
+                this_response = []
 
         if isinstance(this_rt, list):
             this_rt = [float(rt) for rt in this_rt]
         else:
-            this_rt = [float(this_rt)] if not np.isnan(this_rt) and not this_rt is None else []
+            this_rt = [float(this_rt)] if not this_rt is None else []
 
         df.at[i,'num_responses'] = len(this_response)
 
@@ -187,20 +204,21 @@ def parse_responses(df:pd.DataFrame) -> pd.DataFrame:
             if this_correct_resp in this_response:
                 df.at[i,'correct'] = 1
                 correct_index = this_response.index(this_correct_resp)
+                df.at[i,'correct_resp_index'] = correct_index
                 df.at[i,'correct_resp_rt'] = this_rt[correct_index]
             else:
                 df.at[i,'correct'] = 0
                 df.at[i,'correct_resp_rt'] = None
 
-            if df.at[i,'num_responses'] > 1:
-                df.at[i,'multiple_responses'] = 1
-                if this_response[-1] == this_correct_resp:
-                    df.at[i,'last_response_correct'] = 1
-                else:                
-                    df.at[i,'last_response_correct'] = 0
-            else:
-                df.at[i,'multiple_responses'] = 0
-                df.at[i,'last_response_correct'] = df.at[i,'correct']
+            # if df.at[i,'num_responses'] > 1:
+            #     df.at[i,'multiple_responses'] = 1
+            #     if this_response[-1] == this_correct_resp:
+            #         df.at[i,'last_response_correct'] = 1
+            #     else:                
+            #         df.at[i,'last_response_correct'] = 0
+            # else:
+            #     df.at[i,'multiple_responses'] = 0
+            #     df.at[i,'last_response_correct'] = df.at[i,'correct']
         else:
             df.at[i,'first_response'] = None
             df.at[i,'first_response_rt'] = None
@@ -208,10 +226,16 @@ def parse_responses(df:pd.DataFrame) -> pd.DataFrame:
             df.at[i,'last_response_rt'] = None
             df.at[i,'correct'] = 0
             df.at[i,'correct_resp_rt'] = None
-            df.at[i,'multiple_responses'] = 0
-            df.at[i,'last_response_correct'] = 0
+            # df.at[i,'multiple_responses'] = 0
+            # df.at[i,'last_response_correct'] = 0
 
     return df
+
+def safe_diff(sdict: dict, out_key: str, a_key: str, b_key: str):
+    if a_key in sdict and b_key in sdict:
+        sdict[out_key] = sdict[a_key] - sdict[b_key]
+    else:
+        sdict[out_key] = np.nan
 
 def score_df(df:pd.DataFrame,trial_filter:str) -> pd.DataFrame:
     '''
@@ -256,32 +280,32 @@ def score_df(df:pd.DataFrame,trial_filter:str) -> pd.DataFrame:
                 score_dict[f'{event_type}_{switch_rep}_{cue}_median_correct_resp_rt'] = cue_group.loc[cue_group['correct']==1,'correct_resp_rt'].median()
                 score_dict[f'{event_type}_{switch_rep}_{cue}_std_correct_resp_rt'] = cue_group.loc[cue_group['correct']==1,'correct_resp_rt'].std()
         
-        score_dict[f'{event_type}_switch_cost_mean_first_rt'] = score_dict[f'{event_type}_switch_mean_first_rt'] - score_dict[f'{event_type}_repeat_mean_first_rt']
-        score_dict[f'{event_type}_switch_cost_median_first_rt'] = score_dict[f'{event_type}_switch_median_first_rt'] - score_dict[f'{event_type}_repeat_median_first_rt']
-        score_dict[f'{event_type}_switch_cost_mean_correct_resp_rt'] = score_dict[f'{event_type}_switch_mean_correct_resp_rt'] - score_dict[f'{event_type}_repeat_mean_correct_resp_rt']
-        score_dict[f'{event_type}_switch_cost_median_correct_resp_rt'] = score_dict[f'{event_type}_switch_median_correct_resp_rt'] - score_dict[f'{event_type}_repeat_median_correct_resp_rt']
-        score_dict[f'{event_type}_switch_cost_accuracy'] = score_dict[f'{event_type}_switch_accuracy'] - score_dict[f'{event_type}_repeat_accuracy']
-        score_dict[f'{event_type}_switch_cost_num_correct'] = score_dict[f'{event_type}_switch_num_correct'] - score_dict[f'{event_type}_repeat_num_correct']
-        
-        score_dict[f'{event_type}_switch_cost_color_mean_first_rt'] = score_dict[f'{event_type}_switch_color_mean_first_rt'] - score_dict[f'{event_type}_repeat_color_mean_first_rt']
-        score_dict[f'{event_type}_switch_cost_color_median_first_rt'] = score_dict[f'{event_type}_switch_color_median_first_rt'] - score_dict[f'{event_type}_repeat_color_median_first_rt']
-        score_dict[f'{event_type}_switch_cost_color_mean_correct_resp_rt'] = score_dict[f'{event_type}_switch_color_mean_correct_resp_rt'] - score_dict[f'{event_type}_repeat_color_mean_correct_resp_rt']
-        score_dict[f'{event_type}_switch_cost_color_median_correct_resp_rt'] = score_dict[f'{event_type}_switch_color_median_correct_resp_rt'] - score_dict[f'{event_type}_repeat_color_median_correct_resp_rt']
-        score_dict[f'{event_type}_switch_cost_color_accuracy'] = score_dict[f'{event_type}_switch_color_accuracy'] - score_dict[f'{event_type}_repeat_color_accuracy']
-        score_dict[f'{event_type}_switch_cost_color_num_correct'] = score_dict[f'{event_type}_switch_color_num_correct'] - score_dict[f'{event_type}_repeat_color_num_correct'] 
+        safe_diff(score_dict, f'{event_type}_switch_cost_mean_first_rt', f'{event_type}_switch_mean_first_rt', f'{event_type}_repeat_mean_first_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_median_first_rt', f'{event_type}_switch_median_first_rt', f'{event_type}_repeat_median_first_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_mean_correct_resp_rt', f'{event_type}_switch_mean_correct_resp_rt', f'{event_type}_repeat_mean_correct_resp_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_median_correct_resp_rt', f'{event_type}_switch_median_correct_resp_rt', f'{event_type}_repeat_median_correct_resp_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_accuracy', f'{event_type}_switch_accuracy', f'{event_type}_repeat_accuracy')
+        safe_diff(score_dict, f'{event_type}_switch_cost_num_correct', f'{event_type}_switch_num_correct', f'{event_type}_repeat_num_correct')
 
-        score_dict[f'{event_type}_switch_cost_shape_mean_first_rt'] = score_dict[f'{event_type}_switch_shape_mean_first_rt'] - score_dict[f'{event_type}_repeat_shape_mean_first_rt']
-        score_dict[f'{event_type}_switch_cost_shape_median_first_rt'] = score_dict[f'{event_type}_switch_shape_median_first_rt'] - score_dict[f'{event_type}_repeat_shape_median_first_rt']
-        score_dict[f'{event_type}_switch_cost_shape_mean_correct_resp_rt'] = score_dict[f'{event_type}_switch_shape_mean_correct_resp_rt'] - score_dict[f'{event_type}_repeat_shape_mean_correct_resp_rt']
-        score_dict[f'{event_type}_switch_cost_shape_median_correct_resp_rt'] = score_dict[f'{event_type}_switch_shape_median_correct_resp_rt'] - score_dict[f'{event_type}_repeat_shape_median_correct_resp_rt']
-        score_dict[f'{event_type}_switch_cost_shape_accuracy'] = score_dict[f'{event_type}_switch_shape_accuracy'] - score_dict[f'{event_type}_repeat_shape_accuracy']
-        score_dict[f'{event_type}_switch_cost_shape_num_correct'] = score_dict[f'{event_type}_switch_shape_num_correct'] - score_dict[f'{event_type}_repeat_shape_num_correct']
+        safe_diff(score_dict, f'{event_type}_switch_cost_color_mean_first_rt', f'{event_type}_switch_color_mean_first_rt', f'{event_type}_repeat_color_mean_first_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_color_median_first_rt', f'{event_type}_switch_color_median_first_rt', f'{event_type}_repeat_color_median_first_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_color_mean_correct_resp_rt', f'{event_type}_switch_color_mean_correct_resp_rt', f'{event_type}_repeat_color_mean_correct_resp_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_color_median_correct_resp_rt', f'{event_type}_switch_color_median_correct_resp_rt', f'{event_type}_repeat_color_median_correct_resp_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_color_accuracy', f'{event_type}_switch_color_accuracy', f'{event_type}_repeat_color_accuracy')
+        safe_diff(score_dict, f'{event_type}_switch_cost_color_num_correct', f'{event_type}_switch_color_num_correct', f'{event_type}_repeat_color_num_correct')
 
-        score_dict[f'{event_type}_switch_cost_lethal_mean_first_rt'] = score_dict[f'{event_type}_switch_lethal_mean_first_rt'] - score_dict[f'{event_type}_repeat_lethal_mean_first_rt']
-        score_dict[f'{event_type}_switch_cost_lethal_median_first_rt'] = score_dict[f'{event_type}_switch_lethal_median_first_rt'] - score_dict[f'{event_type}_repeat_lethal_median_first_rt']
-        score_dict[f'{event_type}_switch_cost_lethal_mean_correct_resp_rt'] = score_dict[f'{event_type}_switch_lethal_mean_correct_resp_rt'] - score_dict[f'{event_type}_repeat_lethal_mean_correct_resp_rt']
-        score_dict[f'{event_type}_switch_cost_lethal_median_correct_resp_rt'] = score_dict[f'{event_type}_switch_lethal_median_correct_resp_rt'] - score_dict[f'{event_type}_repeat_lethal_median_correct_resp_rt']
-        score_dict[f'{event_type}_switch_cost_lethal_accuracy'] = score_dict[f'{event_type}_switch_lethal_accuracy'] - score_dict[f'{event_type}_repeat_lethal_accuracy']
-        score_dict[f'{event_type}_switch_cost_lethal_num_correct'] = score_dict[f'{event_type}_switch_lethal_num_correct'] - score_dict[f'{event_type}_repeat_lethal_num_correct']
+        safe_diff(score_dict, f'{event_type}_switch_cost_shape_mean_first_rt', f'{event_type}_switch_shape_mean_first_rt', f'{event_type}_repeat_shape_mean_first_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_shape_median_first_rt', f'{event_type}_switch_shape_median_first_rt', f'{event_type}_repeat_shape_median_first_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_shape_mean_correct_resp_rt', f'{event_type}_switch_shape_mean_correct_resp_rt', f'{event_type}_repeat_shape_mean_correct_resp_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_shape_median_correct_resp_rt', f'{event_type}_switch_shape_median_correct_resp_rt', f'{event_type}_repeat_shape_median_correct_resp_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_shape_accuracy', f'{event_type}_switch_shape_accuracy', f'{event_type}_repeat_shape_accuracy')
+        safe_diff(score_dict, f'{event_type}_switch_cost_shape_num_correct', f'{event_type}_switch_shape_num_correct', f'{event_type}_repeat_shape_num_correct')
+
+        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_mean_first_rt', f'{event_type}_switch_lethality_mean_first_rt', f'{event_type}_repeat_lethality_mean_first_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_median_first_rt', f'{event_type}_switch_lethality_median_first_rt', f'{event_type}_repeat_lethality_median_first_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_mean_correct_resp_rt', f'{event_type}_switch_lethality_mean_correct_resp_rt', f'{event_type}_repeat_lethality_mean_correct_resp_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_median_correct_resp_rt', f'{event_type}_switch_lethality_median_correct_resp_rt', f'{event_type}_repeat_lethality_median_correct_resp_rt')
+        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_accuracy', f'{event_type}_switch_lethality_accuracy', f'{event_type}_repeat_lethality_accuracy')
+        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_num_correct', f'{event_type}_switch_lethality_num_correct', f'{event_type}_repeat_lethality_num_correct')
 
     return pd.DataFrame(score_dict, index=[0])
