@@ -76,16 +76,34 @@ def write_out(df:pd.DataFrame,out:str,merged:bool,filetype:str,tag:str='',exp_na
         df.to_csv(os.path.join(out,filename),index=False,sep=sep)
 
 def handle_multiple_responses(value, slice_index=0) -> str|float|int|None:
-    # if string representation of a list, and list is not empty, keep only the first value of list
-    if isinstance(value,str) and re.match(r'^\[.*\]$',value):
-        eval_value = literal_eval(value)
-        if isinstance(eval_value,list):
+    # If a string representation of a list, and list is not empty, keep only the requested slice.
+    # Also defensively handle common non-literal tokens like nan/NaN/None/inf inside the list.
+
+    if isinstance(value, str) and re.match(r'^\[.*\]$', value.strip()):
+        s = value.strip()
+
+        # Replace tokens that aren't valid Python literals for literal_eval.
+        # (Keep this conservative: only do it for common float-ish NaN/None/inf spellings.)
+        s = re.sub(r'\bnan\b', 'None', s, flags=re.IGNORECASE)
+        s = re.sub(r'\bNaN\b', 'None', s)
+        s = re.sub(r'\binf\b', 'None', s, flags=re.IGNORECASE)
+        s = re.sub(r'\b-?inf\b', 'None', s, flags=re.IGNORECASE)
+        # JSON null inside list-like strings
+        s = re.sub(r'\bnull\b', 'None', s, flags=re.IGNORECASE)
+        s = re.sub(r'\bNone\b', 'None', s, flags=re.IGNORECASE)
+
+
+        try:
+            eval_value = literal_eval(s)
+        except (ValueError, SyntaxError):
+            return value
+
+        if isinstance(eval_value, list):
             if len(eval_value) > 0:
                 return eval_value[slice_index]
-            else:
-                return None
-    else:
-        return value
+            return value
+
+    return value
 
 def get_meta_cols(df,params):
     '''

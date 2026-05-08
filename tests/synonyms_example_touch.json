@@ -1,0 +1,25 @@
+{
+    "metacols":{
+        "id":"participant",
+        "session":"session",
+        "datetime":"date",
+        "exp_name":"expName",
+        "software_version":"psychopyVersion",
+        "framerate":"frameRate",
+        "os":"OS"
+    },
+    "cols":{
+        "correct_resp":"correct_opt",
+        "response":"word_touch_response.clicked_name",
+        "rt":"word_touch_response.time",
+        "trial":"trials.thisTrialN",
+        "stimuli":"word",
+        "stim_dur":"time",
+        "correct_str":"correct_opt_str",
+        "correct_word":"correct_word",
+        "opt1":"opt1",
+        "opt2":"opt2",
+        "opt3":"opt3",
+        "opt4":"opt4"
+    }
+}
