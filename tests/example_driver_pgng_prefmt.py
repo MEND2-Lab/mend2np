@@ -24,7 +24,17 @@ addtional required for timing: exp_start, stim_start, stim_dur
 
 '''
 
+from pathlib import Path
+
 from mend2np.pgng import pgng
+
+HERE = Path(__file__).parent
+data_dir = HERE / 'example_data'
+out_dir = HERE / 'out'
+
+filelist = [
+    str(data_dir / 'example_data_psychopy_pgng_fmt_1.csv'),
+]
 
 # params structure if data is formatted (tidy):
 params = {
@@ -50,4 +60,4 @@ params = {
     }
 }
 
-pgng(params=params,formatted=True,cov=True,out="tests/out",filelist="filepaths.txt")
+pgng(params=params, formatted=True, out=str(out_dir), filelist=filelist)

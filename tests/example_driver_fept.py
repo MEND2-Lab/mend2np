@@ -1,5 +1,15 @@
+from pathlib import Path
 
 from mend2np.fept import fept
+
+HERE = Path(__file__).parent
+data_dir = HERE / 'example_data'
+out_dir = HERE / 'out'
+
+filelist = [
+    str(data_dir / 'example_data_psychopy_fept_1.csv'),
+    str(data_dir / 'example_data_psychopy_fept_2.csv'),
+]
 
 params = {
     'metacols':{
@@ -78,4 +88,4 @@ params = {
     }
 }
 
-fept(params=params,out="tests/out")
+fept(params=params, out=str(out_dir), filelist=filelist)

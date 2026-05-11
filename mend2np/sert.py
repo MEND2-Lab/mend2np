@@ -1,15 +1,26 @@
 '''
+SERT (Suicide Emotion Rigidity Task) scoring.
 
+Reads PsychoPy CSV output of the SERT, parses the per-trial choice stimuli into
+their semantic components (class / type / color / shape), classifies trials as
+switch vs. repeat blocks, scores accuracy and RTs by event_type × switch/repeat
+× cue dimension, and computes switch-cost difference scores for each
+(metric, cue) combination.
 '''
+
 import re
 import os
-import sys
-import traceback
+from pathlib import Path
 import pandas as pd
 import numpy as np
-from math import ceil
-from pathlib import Path
-from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
+from mend2np.utils import (
+    setup_logger,
+    write_out,
+    get_meta_cols,
+    handle_multiple_responses,
+    validate_params,
+    run_task,
+)
 
 touch_resp_mapping = {
     'LeftImage':1,
@@ -17,106 +28,105 @@ touch_resp_mapping = {
     'RightImage':3
 }
 
+REQUIRED_PARAMS = {
+    'metacols': dict,
+    'cols': dict,
+}
+
+# Per-bucket score metrics — same set is computed at every level of the
+# (event_type) × (switch/repeat) × (cue) grid.
+_BUCKET_METRICS = (
+    'num_trials',
+    'num_correct',
+    'accuracy',
+    'mean_first_rt',
+    'median_first_rt',
+    'std_first_rt',
+    'mean_correct_resp_rt',
+    'median_correct_resp_rt',
+    'std_correct_resp_rt',
+)
+
+# Cue dimensions over which switch-cost differences are reported. '' = the
+# bucket-level switch cost (no cue split). The named entries are the cue values
+# the original code hard-coded.
+_SWITCH_COST_CUES = ('', 'color', 'shape', 'lethality')
+
+# Subset of bucket metrics that switch-cost differences are computed for.
+_SWITCH_COST_METRICS = (
+    'mean_first_rt',
+    'median_first_rt',
+    'mean_correct_resp_rt',
+    'median_correct_resp_rt',
+    'accuracy',
+    'num_correct',
+)
+
+
 def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20,
          trial_filter:str='') -> tuple:
+    """Score one or more SERT data files.
 
-    os.makedirs(out, exist_ok=True)
+    :param params: configuration dict (see `tests/sert_example.json` or `sert_example_touch.json`).
+    :param out: output directory.
+    :param write: if True, write combined trials + scores CSVs.
+    :param filelist: list of CSV paths, path to a text file with one CSV per line, or empty for GUI picker.
+    :param formatted: True if the input is already tidy with standard column names.
+    :param log: log level.
+    :param trial_filter: optional pandas query string to subset trials before scoring.
+    :returns: (combined_scores, combined_trials).
+    """
+    setup_logger(name='root', out=out, level=log).info('start')
+    validate_params(params, REQUIRED_PARAMS)
 
-    global logger
-    logger = setup_logger(name='root',out=out,level=log)
-    logger.info('start')
+    def process_one(filepath, params, logger):
+        filename = os.path.basename(filepath)
+        df = pd.read_csv(filepath)
+        if not formatted:
+            df = format_df(df, params)
+        df = parse_choice_columns(df)
+        df = add_switch_rep(df)
+        df = parse_responses(df)
+        df.insert(1, 'filename', filename)
+        scores_row = pd.concat([get_meta_cols(df, params), score_df(df, trial_filter)], axis=1)
+        scores_row.insert(1, 'filename', filename)
+        return df, scores_row
 
-    # sort how the file list was passed
-    if filelist:
-        if isinstance(filelist, list):
-            # if filelist is iterable
-            filepaths = filelist
-        elif os.path.isfile(filelist):
-            # else if a file, try reading filepaths
-            try:
-                filepaths = [line.strip() for line in open(filelist, 'r', encoding='utf-8')]
-            except Exception as e:
-                logger.critical(f'problem reading filelist: {filelist}: {e}\n{traceback.format_exc()}\n')
-                sys.exit(1)
-        else:
-            logger.critical(f'problem with filelist: {filelist}, consult docs or leave blank to use GUI file select')
-            sys.exit(1)
-    else:
-        # else do the GUI file select
-        filepaths = select_files()
+    return run_task(
+        params=params, filelist=filelist, out=out, write=write, log=log,
+        process_file_fn=process_one,
+    )
 
-    # initiate combined files
-    combined_trials = pd.DataFrame()
-    combined_scores = pd.DataFrame()
 
-    # loop through data files
-    for filepath in filepaths:
-        logger.info(f'processing: {filepath}')
-
-        try:
-            filename = os.path.basename(filepath)
-
-            df = pd.read_csv(filepath)
-
-            if not formatted:
-                df = format_df(df,params)
-
-            df = parse_choice_columns(df)
-
-            df = add_switch_rep(df)
-
-            df = parse_responses(df)
-
-            df.insert(1,'filename',filename)
-
-            combined_trials = pd.concat([combined_trials,df],axis=0,ignore_index=True)
-
-            this_row = pd.concat([get_meta_cols(df,params),score_df(df,trial_filter)],axis=1)
-            this_row.insert(1,'filename',filename)
-            combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
-
-        except Exception as e:
-            logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
-
-    if write:
-        if not combined_trials.empty:
-            write_out(combined_trials,out,True,'csv','trials')
-        if not combined_scores.empty:
-            write_out(combined_scores,out,True,'csv','scores')
-    
-    logger.info('end')
-
-    return combined_scores, combined_trials
-
-def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
-
+def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
     fmtdf = pd.DataFrame()
-
     mask = np.invert(df[params['cols']['trial']].isna())
 
     for metacol in params['metacols']:
         if params['metacols'][metacol] and params['metacols'][metacol] in df.columns:
-            fmtdf[metacol] = df.loc[mask,params['metacols'][metacol]]
+            fmtdf[metacol] = df.loc[mask, params['metacols'][metacol]]
 
     for col in params['cols']:
         if params['cols'][col] and params['cols'][col] in df.columns:
-            fmtdf[col] = df.loc[mask,params['cols'][col]]
+            fmtdf[col] = df.loc[mask, params['cols'][col]]
 
-     # handle multiple responses
-    for resp_col in ['response','rt']:
+    for resp_col in ['response', 'rt']:
         if resp_col in fmtdf.columns:
-            # if string representation of a list, convert to list
             fmtdf[resp_col] = fmtdf[resp_col].apply(lambda x: handle_multiple_responses(x, slice_index=slice(None)))
 
-    fmtdf['response'] = fmtdf['response'].apply(lambda x: [touch_resp_mapping.get(resp, resp) for resp in x] if isinstance(x, list) else touch_resp_mapping.get(x, x))
-
+    fmtdf['response'] = fmtdf['response'].apply(
+        lambda x: [touch_resp_mapping.get(resp, resp) for resp in x] if isinstance(x, list)
+        else touch_resp_mapping.get(x, x)
+    )
     return fmtdf
+
 
 def add_switch_rep(df:pd.DataFrame) -> pd.DataFrame:
     df['block'] = ((df['trial']) // 10) + 1
     df['block_nunique_cues'] = df.groupby('block')['cue'].transform('nunique')
     df['block_switch_rep'] = np.where(df['block_nunique_cues'] > 1, 'switch', 'repeat')
     return df
+
 
 def parse_choice_value(value:str) -> dict:
     if pd.isna(value):
@@ -150,86 +160,108 @@ def parse_choice_value(value:str) -> dict:
         'class': obj_class,
         'type': obj_type,
         'color': color,
-        'shape': 'rect' if shape == 'rectangle' else shape
+        'shape': 'rect' if shape == 'rectangle' else shape,
     }
+
 
 def parse_choice_columns(df:pd.DataFrame) -> pd.DataFrame:
     for side in ['left', 'middle', 'right']:
         choice_col = f'{side}_choice'
         if choice_col not in df.columns:
             continue
-
         parsed = df[choice_col].apply(parse_choice_value).apply(pd.Series)
         parsed.columns = [f'{choice_col}_{suffix}' for suffix in parsed.columns]
         df = pd.concat([df, parsed], axis=1)
-
     return df
+
+
+def _normalize_response(value):
+    """Coerce a sert response cell into a Python list of mapped values.
+
+    Mirrors the original iterrows-based logic. Note the quirky NaN handling: a
+    NaN cell falls through to the `isalpha` branch (because `str(float('nan'))`
+    is `"nan"`, which is alpha) and ends up as `[nan]`. That quirk is preserved
+    so per-trial outputs stay byte-identical with the historical scores.
+    """
+    if isinstance(value, list):
+        return [int(r) if str(r).isdigit() else touch_resp_mapping.get(r, r) for r in value]
+    if value is None:
+        return []
+    s = str(value)
+    if s.isdigit():
+        return [int(value)]
+    if s.isalpha():  # includes NaN ("nan")
+        return [touch_resp_mapping.get(value, value)]
+    return [value]
+
+
+def _normalize_rt(value):
+    if isinstance(value, list):
+        return [float(r) for r in value]
+    if value is None:
+        return []
+    return [float(value)]  # float(nan) is still nan — preserves the NaN value
+
 
 def parse_responses(df:pd.DataFrame) -> pd.DataFrame:
-    for i, row in df.iterrows():
-        
-        this_response = row['response'] if 'response' in row else None
-        this_rt = row['rt'] if 'rt' in row else None
-        this_correct_resp = int(row['correct_resp']) if 'correct_resp' in row else None
+    """Compute derived response columns: num_responses, first/last response + RT,
+    correct flag, correct_resp_index, correct_resp_rt. No in-place mutation."""
+    df = df.copy()
+    if 'response' not in df.columns or 'rt' not in df.columns:
+        return df
 
-        if isinstance(this_response, list):
-            # for each response in list, if it's a digit convert to int, else map using touch_resp_mapping, if not in mapping keep as is
-            this_response = [int(resp) if str(resp).isdigit() else touch_resp_mapping.get(resp, resp) for resp in this_response]
-        else:
-            if not this_response is None:
-                if str(this_response).isdigit():
-                    this_response = int(this_response)
-                elif str(this_response).isalpha():
-                    this_response = [touch_resp_mapping.get(this_response, this_response)]
-                else:
-                    this_response = [this_response]
-            else:
-                this_response = []
+    resp_lists = df['response'].apply(_normalize_response)
+    rt_lists = df['rt'].apply(_normalize_rt)
 
-        if isinstance(this_rt, list):
-            this_rt = [float(rt) for rt in this_rt]
-        else:
-            this_rt = [float(this_rt)] if not this_rt is None else []
+    def _to_int(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+    correct_resp_int = (df['correct_resp'].apply(_to_int)
+                       if 'correct_resp' in df.columns
+                       else pd.Series([None] * len(df), index=df.index))
 
-        df.at[i,'num_responses'] = len(this_response)
+    n = resp_lists.apply(len)
 
-        if df.at[i,'num_responses'] > 0:
+    def _first(l): return l[0] if l else np.nan
+    def _last(l): return l[-1] if l else np.nan
 
-            df.at[i,'first_response'] = this_response[0]
-            df.at[i,'first_response_rt'] = this_rt[0]
+    first_response = resp_lists.apply(_first)
+    last_response = resp_lists.apply(_last)
+    first_response_rt = rt_lists.apply(_first)
+    last_response_rt = rt_lists.apply(_last)
 
-            df.at[i,'last_response'] = this_response[-1]
-            df.at[i,'last_response_rt'] = this_rt[-1]
+    def _correct_index(resp_list, target):
+        if not resp_list or target is None or target not in resp_list:
+            return np.nan
+        return float(resp_list.index(target))
+    correct_resp_index = pd.Series(
+        [_correct_index(r, t) for r, t in zip(resp_lists, correct_resp_int)],
+        index=df.index, dtype='float64',
+    )
 
-            if this_correct_resp in this_response:
-                df.at[i,'correct'] = 1
-                correct_index = this_response.index(this_correct_resp)
-                df.at[i,'correct_resp_index'] = correct_index
-                df.at[i,'correct_resp_rt'] = this_rt[correct_index]
-            else:
-                df.at[i,'correct'] = 0
-                df.at[i,'correct_resp_rt'] = None
+    def _correct_rt(rt_list, idx):
+        if pd.isna(idx) or not rt_list:
+            return np.nan
+        return rt_list[int(idx)]
+    correct_resp_rt = pd.Series(
+        [_correct_rt(r, i) for r, i in zip(rt_lists, correct_resp_index)],
+        index=df.index, dtype='float64',
+    )
 
-            # if df.at[i,'num_responses'] > 1:
-            #     df.at[i,'multiple_responses'] = 1
-            #     if this_response[-1] == this_correct_resp:
-            #         df.at[i,'last_response_correct'] = 1
-            #     else:                
-            #         df.at[i,'last_response_correct'] = 0
-            # else:
-            #     df.at[i,'multiple_responses'] = 0
-            #     df.at[i,'last_response_correct'] = df.at[i,'correct']
-        else:
-            df.at[i,'first_response'] = None
-            df.at[i,'first_response_rt'] = None
-            df.at[i,'last_response'] = None
-            df.at[i,'last_response_rt'] = None
-            df.at[i,'correct'] = 0
-            df.at[i,'correct_resp_rt'] = None
-            # df.at[i,'multiple_responses'] = 0
-            # df.at[i,'last_response_correct'] = 0
+    correct = (~correct_resp_index.isna()).astype(float)
 
+    df['num_responses'] = n.astype(float)
+    df['first_response'] = first_response
+    df['first_response_rt'] = first_response_rt
+    df['last_response'] = last_response
+    df['last_response_rt'] = last_response_rt
+    df['correct'] = correct
+    df['correct_resp_index'] = correct_resp_index
+    df['correct_resp_rt'] = correct_resp_rt
     return df
+
 
 def safe_diff(sdict: dict, out_key: str, a_key: str, b_key: str):
     if a_key in sdict and b_key in sdict:
@@ -237,75 +269,46 @@ def safe_diff(sdict: dict, out_key: str, a_key: str, b_key: str):
     else:
         sdict[out_key] = np.nan
 
-def score_df(df:pd.DataFrame,trial_filter:str) -> pd.DataFrame:
-    '''
-    '''
+
+def _bucket_metrics(score_dict: dict, prefix: str, group: pd.DataFrame) -> None:
+    """Write the standard bucket metric set into score_dict under `prefix`."""
+    correct_only = group.loc[group['correct'] == 1, 'correct_resp_rt']
+    score_dict[f'{prefix}_num_trials'] = len(group)
+    score_dict[f'{prefix}_num_correct'] = group['correct'].sum()
+    score_dict[f'{prefix}_accuracy'] = group['correct'].mean()
+    score_dict[f'{prefix}_mean_first_rt'] = group['first_response_rt'].mean()
+    score_dict[f'{prefix}_median_first_rt'] = group['first_response_rt'].median()
+    score_dict[f'{prefix}_std_first_rt'] = group['first_response_rt'].std()
+    score_dict[f'{prefix}_mean_correct_resp_rt'] = correct_only.mean()
+    score_dict[f'{prefix}_median_correct_resp_rt'] = correct_only.median()
+    score_dict[f'{prefix}_std_correct_resp_rt'] = correct_only.std()
+
+
+def score_df(df:pd.DataFrame, trial_filter:str) -> pd.DataFrame:
     score_dict = {}
 
-    # apply trial filter if specified
     if trial_filter:
         df = df.query(trial_filter)
 
     for event_type, event_group in df.groupby('event_type'):
 
-        score_dict[f'{event_type}_num_trials'] = len(event_group)
-        score_dict[f'{event_type}_num_correct'] = event_group['correct'].sum()
-        score_dict[f'{event_type}_accuracy'] = event_group['correct'].mean()
-        score_dict[f'{event_type}_mean_first_rt'] = event_group['first_response_rt'].mean()
-        score_dict[f'{event_type}_median_first_rt'] = event_group['first_response_rt'].median()
-        score_dict[f'{event_type}_std_first_rt'] = event_group['first_response_rt'].std()
-        score_dict[f'{event_type}_mean_correct_resp_rt'] = event_group.loc[event_group['correct']==1,'correct_resp_rt'].mean()
-        score_dict[f'{event_type}_median_correct_resp_rt'] = event_group.loc[event_group['correct']==1,'correct_resp_rt'].median()
-        score_dict[f'{event_type}_std_correct_resp_rt'] = event_group.loc[event_group['correct']==1,'correct_resp_rt'].std()
+        _bucket_metrics(score_dict, str(event_type), event_group)
 
         for switch_rep, switch_rep_group in event_group.groupby('block_switch_rep'):
-            score_dict[f'{event_type}_{switch_rep}_num_trials'] = len(switch_rep_group)
-            score_dict[f'{event_type}_{switch_rep}_num_correct'] = switch_rep_group['correct'].sum()
-            score_dict[f'{event_type}_{switch_rep}_accuracy'] = switch_rep_group['correct'].mean()
-            score_dict[f'{event_type}_{switch_rep}_mean_first_rt'] = switch_rep_group['first_response_rt'].mean()
-            score_dict[f'{event_type}_{switch_rep}_median_first_rt'] = switch_rep_group['first_response_rt'].median()
-            score_dict[f'{event_type}_{switch_rep}_std_first_rt'] = switch_rep_group['first_response_rt'].std()
-            score_dict[f'{event_type}_{switch_rep}_mean_correct_resp_rt'] = switch_rep_group.loc[switch_rep_group['correct']==1,'correct_resp_rt'].mean()
-            score_dict[f'{event_type}_{switch_rep}_median_correct_resp_rt'] = switch_rep_group.loc[switch_rep_group['correct']==1,'correct_resp_rt'].median()
-            score_dict[f'{event_type}_{switch_rep}_std_correct_resp_rt'] = switch_rep_group.loc[switch_rep_group['correct']==1,'correct_resp_rt'].std()
+            _bucket_metrics(score_dict, f'{event_type}_{switch_rep}', switch_rep_group)
 
             for cue, cue_group in switch_rep_group.groupby('cue'):
-                score_dict[f'{event_type}_{switch_rep}_{cue}_num_trials'] = len(cue_group)
-                score_dict[f'{event_type}_{switch_rep}_{cue}_num_correct'] = cue_group['correct'].sum()
-                score_dict[f'{event_type}_{switch_rep}_{cue}_accuracy'] = cue_group['correct'].mean()
-                score_dict[f'{event_type}_{switch_rep}_{cue}_mean_first_rt'] = cue_group['first_response_rt'].mean()
-                score_dict[f'{event_type}_{switch_rep}_{cue}_median_first_rt'] = cue_group['first_response_rt'].median()
-                score_dict[f'{event_type}_{switch_rep}_{cue}_std_first_rt'] = cue_group['first_response_rt'].std()
-                score_dict[f'{event_type}_{switch_rep}_{cue}_mean_correct_resp_rt'] = cue_group.loc[cue_group['correct']==1,'correct_resp_rt'].mean()
-                score_dict[f'{event_type}_{switch_rep}_{cue}_median_correct_resp_rt'] = cue_group.loc[cue_group['correct']==1,'correct_resp_rt'].median()
-                score_dict[f'{event_type}_{switch_rep}_{cue}_std_correct_resp_rt'] = cue_group.loc[cue_group['correct']==1,'correct_resp_rt'].std()
-        
-        safe_diff(score_dict, f'{event_type}_switch_cost_mean_first_rt', f'{event_type}_switch_mean_first_rt', f'{event_type}_repeat_mean_first_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_median_first_rt', f'{event_type}_switch_median_first_rt', f'{event_type}_repeat_median_first_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_mean_correct_resp_rt', f'{event_type}_switch_mean_correct_resp_rt', f'{event_type}_repeat_mean_correct_resp_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_median_correct_resp_rt', f'{event_type}_switch_median_correct_resp_rt', f'{event_type}_repeat_median_correct_resp_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_accuracy', f'{event_type}_switch_accuracy', f'{event_type}_repeat_accuracy')
-        safe_diff(score_dict, f'{event_type}_switch_cost_num_correct', f'{event_type}_switch_num_correct', f'{event_type}_repeat_num_correct')
+                _bucket_metrics(score_dict, f'{event_type}_{switch_rep}_{cue}', cue_group)
 
-        safe_diff(score_dict, f'{event_type}_switch_cost_color_mean_first_rt', f'{event_type}_switch_color_mean_first_rt', f'{event_type}_repeat_color_mean_first_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_color_median_first_rt', f'{event_type}_switch_color_median_first_rt', f'{event_type}_repeat_color_median_first_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_color_mean_correct_resp_rt', f'{event_type}_switch_color_mean_correct_resp_rt', f'{event_type}_repeat_color_mean_correct_resp_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_color_median_correct_resp_rt', f'{event_type}_switch_color_median_correct_resp_rt', f'{event_type}_repeat_color_median_correct_resp_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_color_accuracy', f'{event_type}_switch_color_accuracy', f'{event_type}_repeat_color_accuracy')
-        safe_diff(score_dict, f'{event_type}_switch_cost_color_num_correct', f'{event_type}_switch_color_num_correct', f'{event_type}_repeat_color_num_correct')
-
-        safe_diff(score_dict, f'{event_type}_switch_cost_shape_mean_first_rt', f'{event_type}_switch_shape_mean_first_rt', f'{event_type}_repeat_shape_mean_first_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_shape_median_first_rt', f'{event_type}_switch_shape_median_first_rt', f'{event_type}_repeat_shape_median_first_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_shape_mean_correct_resp_rt', f'{event_type}_switch_shape_mean_correct_resp_rt', f'{event_type}_repeat_shape_mean_correct_resp_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_shape_median_correct_resp_rt', f'{event_type}_switch_shape_median_correct_resp_rt', f'{event_type}_repeat_shape_median_correct_resp_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_shape_accuracy', f'{event_type}_switch_shape_accuracy', f'{event_type}_repeat_shape_accuracy')
-        safe_diff(score_dict, f'{event_type}_switch_cost_shape_num_correct', f'{event_type}_switch_shape_num_correct', f'{event_type}_repeat_shape_num_correct')
-
-        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_mean_first_rt', f'{event_type}_switch_lethality_mean_first_rt', f'{event_type}_repeat_lethality_mean_first_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_median_first_rt', f'{event_type}_switch_lethality_median_first_rt', f'{event_type}_repeat_lethality_median_first_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_mean_correct_resp_rt', f'{event_type}_switch_lethality_mean_correct_resp_rt', f'{event_type}_repeat_lethality_mean_correct_resp_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_median_correct_resp_rt', f'{event_type}_switch_lethality_median_correct_resp_rt', f'{event_type}_repeat_lethality_median_correct_resp_rt')
-        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_accuracy', f'{event_type}_switch_lethality_accuracy', f'{event_type}_repeat_lethality_accuracy')
-        safe_diff(score_dict, f'{event_type}_switch_cost_lethality_num_correct', f'{event_type}_switch_lethality_num_correct', f'{event_type}_repeat_lethality_num_correct')
+        # Switch-cost differences: switch minus repeat, for each (cue, metric) combination.
+        for cue_label in _SWITCH_COST_CUES:
+            cue_suffix = f'_{cue_label}' if cue_label else ''
+            for metric in _SWITCH_COST_METRICS:
+                safe_diff(
+                    score_dict,
+                    f'{event_type}_switch_cost{cue_suffix}_{metric}',
+                    f'{event_type}_switch{cue_suffix}_{metric}',
+                    f'{event_type}_repeat{cue_suffix}_{metric}',
+                )
 
     return pd.DataFrame(score_dict, index=[0])

@@ -1,0 +1,2 @@
+id,filename,session,datetime,exp_name,software_version,framerate,os,num_correct,prop_correct,mean_rt,sd_rt,mean_correct_resp_rt,std_correct_resp_rt,mean_incorrect_resp_rt,std_incorrect_resp_rt
+test1,example_data_synonyms_1.csv,2,2020-01-01_99h99.99.999,Synonyms,2020.1.2,60,Win32,25.0,0.625,4.577767500025,2.2042256190469067,3.669856,1.6883308524680745,6.0909533334,2.1732331772451916

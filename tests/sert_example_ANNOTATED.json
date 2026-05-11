@@ -1,0 +1,38 @@
+{
+    "_comment_metacols": "metacols maps standard metadata names (left) to your CSV's column names (right). Each entry will be carried through to the score-level output. Set the value to an empty string to skip a metacol.",
+    "metacols":{
+        "_comment_id": "Participant ID column. mend2np writes this into the trials + scores output, and uses df['id'].nunique() in the output filename.",
+        "id":"participant",
+        "session":"session",
+        "datetime":"date",
+        "_comment_exp_name": "Used in the output filename as <exp_name>_n<N>_scores_<timestamp>.csv.",
+        "exp_name":"expName",
+        "software_version":"psychopyVersion",
+        "framerate":"frameRate",
+        "os":"OS"
+    },
+    "_comment_cols": "cols maps the trial-level column names this scoring code expects (left) to your CSV's actual column names (right). Any entry whose right-hand-side column isn't in the CSV is silently skipped, so leaving an extra mapping in place is harmless.",
+    "cols":{
+        "_comment_event_type": "Categorical label for each trial type (e.g. 'go', 'nogo'). Used as the primary grouping in score_df.",
+        "event_type":"eventtype",
+        "_comment_cue": "Per-trial cue value. Used to compute per-cue switch-cost differences.",
+        "cue":"cue",
+        "correct_resp":"correct_resp",
+        "_comment_response": "For keyboard responses use 'stim_response.keys'; for touchscreen use 'touch_stim_response.clicked_name' and load sert_example_touch.json instead of this file.",
+        "response":"stim_response.keys",
+        "rt":"stim_response.rt",
+        "_comment_trial": "Trial-counter column. Used as the mask: rows where this is NaN are dropped before scoring (filters out non-trial header/practice rows that PsychoPy emits).",
+        "trial":"trials.thisTrialN",
+        "left_choice":"LeftChoice",
+        "middle_choice":"MiddleChoice",
+        "right_choice":"RightChoice",
+        "_comment_timing": "The next six columns are only used if the timing/onsets feature is engaged; safe to leave blank if you don't need fMRI-style timing output.",
+        "stim_onset":"imagestim.started",
+        "stim_offset":"imagestim.stopped",
+        "iti_onset":"fixation.started",
+        "iti_offset":"fixation.stopped",
+        "iti_dur":"fixationduration",
+        "cue_dur":"cueduration",
+        "stim_with_cue_dur":"stimwithcue"
+    }
+}

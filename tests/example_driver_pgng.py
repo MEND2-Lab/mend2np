@@ -1,8 +1,15 @@
-'''
-
-'''
+from pathlib import Path
 
 from mend2np.pgng import pgng
+
+HERE = Path(__file__).parent
+data_dir = HERE / 'example_data'
+out_dir = HERE / 'out'
+
+filelist = [
+    str(data_dir / 'example_data_psychopy_pgng_2.csv'),
+    str(data_dir / 'example_data_psychopy_pgng_3.csv'),
+]
 
 # params structure if data is unformatted:
 params = {
@@ -107,4 +114,4 @@ params = {
     }
 }
 
-pgng(params=params,formatted=False,out="tests/out")
+pgng(params=params, formatted=False, out=str(out_dir), filelist=filelist)

@@ -1,15 +1,32 @@
+'''
+Synonyms task scoring.
 
-import re
+Reads PsychoPy CSV output of a synonym-matching task, maps keyboard / touch
+responses to numeric option indices via a configurable mapping, and computes
+per-participant accuracy and RT summary statistics.
+'''
+
 import os
-import sys
-import traceback
+import logging
 import pandas as pd
 import numpy as np
-from math import ceil
-from pathlib import Path
-from mend2np.utils import setup_logger, select_files, write_out, get_meta_cols, handle_multiple_responses
+from mend2np.utils import (
+    setup_logger,
+    write_out,
+    get_meta_cols,
+    handle_multiple_responses,
+    validate_params,
+    run_task,
+)
 
-resp_mapping = {
+REQUIRED_PARAMS = {
+    'metacols': dict,
+    'cols': dict,
+}
+
+# Fallback response mapping used only when the JSON config does not supply its own.
+# Prefer setting `"resp_mapping": {...}` at the top level of the synonyms config.
+DEFAULT_RESP_MAPPING = {
     "n":1,
     "opt1_shape":1,
     "m":2,
@@ -22,158 +39,165 @@ resp_mapping = {
     "opt4_shape":4
 }
 
+
+def _get_resp_mapping(params: dict) -> dict:
+    mapping = params.get('resp_mapping')
+    if mapping is None:
+        logging.getLogger('root').warning(
+            "synonyms: no 'resp_mapping' in params; falling back to DEFAULT_RESP_MAPPING. "
+            "Adding 'resp_mapping' to your JSON config is recommended so the mapping is explicit per experiment."
+        )
+        return DEFAULT_RESP_MAPPING
+    return mapping
+
+
 def synonyms(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20,
-         trial_filter:str='') -> tuple:
+             trial_filter:str='') -> tuple:
+    """Score one or more Synonyms data files.
 
-    os.makedirs(out, exist_ok=True)
+    :param params: configuration dict (see `tests/synonyms_example.json`). May include `'resp_mapping'`
+        to override the built-in keyboard/touch mapping.
+    :param out: output directory.
+    :param write: if True, write combined trials + scores CSVs.
+    :param filelist: list of CSV paths, path to a text file with one CSV per line, or empty for GUI picker.
+    :param formatted: True if the input is already tidy with standard column names.
+    :param log: log level.
+    :param trial_filter: optional pandas query string to subset trials before scoring.
+    :returns: (combined_scores, combined_trials).
+    """
+    setup_logger(name='root', out=out, level=log).info('start')
+    validate_params(params, REQUIRED_PARAMS)
+    resp_mapping = _get_resp_mapping(params)
 
-    global logger
-    logger = setup_logger(name='root',out=out,level=log)
-    logger.info('start')
+    def process_one(filepath, params, logger):
+        filename = os.path.basename(filepath)
+        df = pd.read_csv(filepath)
+        if not formatted:
+            df = format_df(df, params, resp_mapping)
+        df = parse_responses(df, resp_mapping)
+        df.insert(1, 'filename', filename)
+        scores_row = pd.concat([get_meta_cols(df, params), score_df(df, trial_filter)], axis=1)
+        scores_row.insert(1, 'filename', filename)
+        return df, scores_row
 
-    # sort how the file list was passed
-    if filelist:
-        if isinstance(filelist, list):
-            # if filelist is iterable
-            filepaths = filelist
-        elif os.path.isfile(filelist):
-            # else if a file, try reading filepaths
-            try:
-                filepaths = [line.strip() for line in open(filelist, 'r', encoding='utf-8')]
-            except Exception as e:
-                logger.critical(f'problem reading filelist: {filelist}: {e}\n{traceback.format_exc()}\n')
-                sys.exit(1)
-        else:
-            logger.critical(f'problem with filelist: {filelist}, consult docs or leave blank to use GUI file select')
-            sys.exit(1)
-    else:
-        # else do the GUI file select
-        filepaths = select_files()
+    return run_task(
+        params=params, filelist=filelist, out=out, write=write, log=log,
+        process_file_fn=process_one,
+    )
 
-    # initiate combined files
-    combined_trials = pd.DataFrame()
-    combined_scores = pd.DataFrame()
 
-    # loop through data files
-    for filepath in filepaths:
-        logger.info(f'processing: {filepath}')
-
-        try:
-            filename = os.path.basename(filepath)
-
-            df = pd.read_csv(filepath)
-
-            if not formatted:
-                df = format_df(df,params)
-
-            df = parse_responses(df)
-
-            df.insert(1,'filename',filename)
-
-            combined_trials = pd.concat([combined_trials,df],axis=0,ignore_index=True)
-
-            this_row = pd.concat([get_meta_cols(df,params),score_df(df,trial_filter)],axis=1)
-            this_row.insert(1,'filename',filename)
-            combined_scores = pd.concat([combined_scores,this_row],axis=0,ignore_index=True)
-
-        except Exception as e:
-            logger.error(f'{filename} : {e}\n{traceback.format_exc()}\n')
-
-    if write:
-        if not combined_trials.empty:
-            write_out(combined_trials,out,True,'csv','trials')
-        if not combined_scores.empty:
-            write_out(combined_scores,out,True,'csv','scores')
-    
-    logger.info('end')
-
-    return combined_scores, combined_trials
-
-def format_df(df:pd.DataFrame,params:dict) -> pd.DataFrame:
-
+def format_df(df:pd.DataFrame, params:dict, resp_mapping:dict=DEFAULT_RESP_MAPPING) -> pd.DataFrame:
     fmtdf = pd.DataFrame()
-
     mask = np.invert(df[params['cols']['trial']].isna())
 
     for metacol in params['metacols']:
         if params['metacols'][metacol] and params['metacols'][metacol] in df.columns:
-            fmtdf[metacol] = df.loc[mask,params['metacols'][metacol]]
+            fmtdf[metacol] = df.loc[mask, params['metacols'][metacol]]
 
     for col in params['cols']:
         if params['cols'][col] and params['cols'][col] in df.columns:
-            fmtdf[col] = df.loc[mask,params['cols'][col]]
+            fmtdf[col] = df.loc[mask, params['cols'][col]]
 
-     # handle multiple responses
-    for resp_col in ['response','rt']:
+    for resp_col in ['response', 'rt']:
         if resp_col in fmtdf.columns:
-            # if string representation of a list, convert to list
             fmtdf[resp_col] = fmtdf[resp_col].apply(lambda x: handle_multiple_responses(x, slice_index=slice(None)))
 
-    for opt_col in ['response','correct_resp']:
+    for opt_col in ['response', 'correct_resp']:
         if opt_col in fmtdf.columns:
-            fmtdf[opt_col] = fmtdf[opt_col].apply(lambda x: [resp_mapping.get(resp, resp) for resp in x] if isinstance(x, list) else resp_mapping.get(x, x))
+            fmtdf[opt_col] = fmtdf[opt_col].apply(
+                lambda x: [resp_mapping.get(resp, resp) for resp in x] if isinstance(x, list)
+                else resp_mapping.get(x, x)
+            )
 
     return fmtdf
 
-def parse_responses(df:pd.DataFrame):
 
-    for i, row in df.iterrows():
-        
-        this_response = row['response'] if 'response' in row else None
-        this_rt = row['rt'] if 'rt' in row else None
-        this_correct_resp = int(row['correct_resp']) if 'correct_resp' in row else None
+def _normalize_resp_list(value, resp_mapping: dict) -> list:
+    """Coerce a response cell into a list of ints (or mapped values).
 
-        if isinstance(this_response, list):
-            #this_response = [resp for resp in this_response if resp is not None]
-            this_response = [int(resp) if str(resp).isdigit() else resp_mapping.get(resp, resp) for resp in this_response]
-        else:
-            if str(this_response).isdigit():
-                this_response = [int(this_response)]
-            elif not this_response is None:
-                this_response = [resp_mapping.get(this_response, this_response)]
-            else:
-                this_response = []
-
-        if isinstance(this_rt, list):
-            this_rt = [float(rt) for rt in this_rt]
-        else:
-            this_rt = [float(this_rt)] if not this_rt is None else []
-
-        df.at[i,'num_responses'] = len(this_response)
-
-        if df.at[i,'num_responses'] > 0:
-
-            df.at[i,'response_last'] = this_response[-1]
-            df.at[i,'rt_last'] = this_rt[-1]
-
-            if this_correct_resp in this_response:
-                df.at[i,'correct'] = 1
-                correct_index = this_response.index(this_correct_resp)
-                df.at[i,'correct_resp_index'] = correct_index
-            else:
-                df.at[i,'correct'] = 0
-        else:
-            df.at[i,'correct'] = 0
+    Cells reach this function as either a Python list (when the CSV cell was a
+    list-string that handle_multiple_responses parsed) or as a scalar (string
+    keyboard key, or already-mapped int). None becomes [].
+    A NaN scalar gets wrapped as [NaN] to preserve the historical num_responses
+    count of 1 for non-response trials.
+    """
+    if isinstance(value, list):
+        return [int(r) if str(r).isdigit() else resp_mapping.get(r, r) for r in value]
+    if value is None:
+        return []
+    if str(value).isdigit():
+        return [int(value)]
+    return [resp_mapping.get(value, value)]
 
 
+def _normalize_rt_list(value) -> list:
+    if isinstance(value, list):
+        return [float(r) for r in value]
+    if value is None:
+        return []
+    return [float(value)]  # float(nan) → nan; preserves historical behavior
+
+
+def parse_responses(df:pd.DataFrame, resp_mapping:dict=DEFAULT_RESP_MAPPING):
+    """Compute per-trial derived response columns from `response`, `rt`, `correct_resp`.
+
+    Writes: `num_responses`, `response_last`, `rt_last`, `correct`, `correct_resp_index`.
+    No in-place mutation of df cells — derived columns are computed via `.apply` and
+    appended in one assignment so SettingWithCopyWarning is impossible.
+    """
+    df = df.copy()
+    if 'response' not in df.columns or 'rt' not in df.columns:
+        return df
+
+    resp_lists = df['response'].apply(lambda v: _normalize_resp_list(v, resp_mapping))
+    rt_lists = df['rt'].apply(_normalize_rt_list)
+
+    def _correct_int(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+
+    correct_resp_int = df['correct_resp'].apply(_correct_int) if 'correct_resp' in df.columns else pd.Series([None] * len(df), index=df.index)
+
+    n = resp_lists.apply(len)
+    response_last = resp_lists.apply(lambda l: l[-1] if l else np.nan)
+    rt_last = rt_lists.apply(lambda l: l[-1] if l else np.nan)
+
+    def _idx(row_resp, target):
+        if not row_resp or target is None:
+            return np.nan
+        return float(row_resp.index(target)) if target in row_resp else np.nan
+    correct_resp_index = pd.Series(
+        [_idx(r, t) for r, t in zip(resp_lists, correct_resp_int)],
+        index=df.index,
+        dtype='float64',
+    )
+    correct = (~correct_resp_index.isna()).astype(float)
+    # When there are zero responses, the original code sets correct=0 explicitly — that
+    # falls out naturally above since correct_resp_index stays NaN.
+
+    df['num_responses'] = n.astype(float)
+    df['response_last'] = response_last
+    df['rt_last'] = rt_last
+    df['correct'] = correct
+    df['correct_resp_index'] = correct_resp_index
     return df
 
-def score_df(df:pd.DataFrame,trial_filter:str) -> pd.DataFrame:
-    '''
-    '''
+
+def score_df(df:pd.DataFrame, trial_filter:str) -> pd.DataFrame:
     score_dict = {}
 
-    # apply trial filter if specified
     if trial_filter:
         df = df.query(trial_filter)
 
-    score_dict[f'num_correct'] = df['correct'].sum()
-    score_dict[f'prop_correct'] = df['correct'].mean()
-    score_dict[f'mean_rt'] = df['rt_last'].mean()
-    score_dict[f'sd_rt'] = df['rt_last'].std()
-    score_dict[f'mean_correct_resp_rt'] = df.loc[df['correct']==1,'rt_last'].mean()
-    score_dict[f'std_correct_resp_rt'] = df.loc[df['correct']==1,'rt_last'].std()
-    score_dict[f'mean_incorrect_resp_rt'] = df.loc[df['correct']==0,'rt_last'].mean()
-    score_dict[f'std_incorrect_resp_rt'] = df.loc[df['correct']==0,'rt_last'].std()
+    score_dict['num_correct'] = df['correct'].sum()
+    score_dict['prop_correct'] = df['correct'].mean()
+    score_dict['mean_rt'] = df['rt_last'].mean()
+    score_dict['sd_rt'] = df['rt_last'].std()
+    score_dict['mean_correct_resp_rt'] = df.loc[df['correct']==1, 'rt_last'].mean()
+    score_dict['std_correct_resp_rt'] = df.loc[df['correct']==1, 'rt_last'].std()
+    score_dict['mean_incorrect_resp_rt'] = df.loc[df['correct']==0, 'rt_last'].mean()
+    score_dict['std_incorrect_resp_rt'] = df.loc[df['correct']==0, 'rt_last'].std()
 
     return pd.DataFrame(score_dict, index=[0])
