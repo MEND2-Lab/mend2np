@@ -1,0 +1,2 @@
+id,filename,session,datetime,exp_name,software_version,framerate,os,dominant_n_trials,dominant_mean_rt,dominant_sd_rt,nondominant_n_trials,nondominant_mean_rt,nondominant_sd_rt
+test4,test4_fo.csv,2,2020-01-01_12h00.00.000,fingerosc_soar_2025.2.3,2025.2.4,60.97560976,Win32,143,0.16125664335664333,0.033738598615546025,143,0.2038972027972028,0.07257731763005627

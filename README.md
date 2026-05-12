@@ -2,15 +2,16 @@
 
 Python scoring scripts for behavioural CSV data from neuropsych tasks run in the MEND2 lab. Reads PsychoPy / E-Prime CSV output, applies experiment-version-specific column mappings via a JSON config, and writes aggregated trial-level and score-level CSVs.
 
-Five tasks are supported:
+Six tasks are supported:
 
 | Task | What it measures | Example config |
 | --- | --- | --- |
-| **sert** | Switch/repeat selective-evaluation task; per-cue accuracy and switch cost RTs | [`tests/sert_example.json`](tests/sert_example.json) |
+| **sert** | Suicide Emotion Rigidity Task; per-cue accuracy and switch cost RTs | [`tests/sert_example.json`](tests/sert_example.json) |
 | **pgng** | Parametric Go / No-go / Stop; hit / miss / commission counts and RTs per block | (driver script — see [`tests/example_driver_pgng.py`](tests/example_driver_pgng.py)) |
 | **bart** | Balloon Analogue Risk Task; pumps, pops, earnings, post-failure caution | (driver script — see [`tests/example_driver_bart.py`](tests/example_driver_bart.py)) |
 | **fept** | Facial Emotion Perception Task; per-emotion / race / sex / animal accuracy and misclassification counts | (driver script — see [`tests/example_driver_fept.py`](tests/example_driver_fept.py)) |
 | **synonyms** | Synonym matching; accuracy and RT by correctness | [`tests/synonyms_example.json`](tests/synonyms_example.json) |
+| **fingosc** | Finger Oscillation; mean and SD of tap RT per block (dominant vs non-dominant hand) | [`tests/fingosc_example.json`](tests/fingosc_example.json) (keyboard); also `fingosc_example_touch.json` and `fingosc_example_stacked.json` |
 
 ## Requirements
 
@@ -78,13 +79,17 @@ A log file `log_<timestamp>.log` is also written into `out/`.
 
 ## Troubleshooting
 
+**The fastest first step is `preflight_check`** — it confirms every CSV column your config references actually exists in your data, without doing any scoring. See [`docs/CONFIGURING.md#preflight_check`](docs/CONFIGURING.md#preflight_check--validate-config--csv-before-scoring) for usage. The full required-keys-per-task cheat-sheet is in the same doc.
+
 | Error | What it means | Fix |
 | --- | --- | --- |
 | `ConfigError: params is missing required key 'metacols'` | Your JSON config is missing a section, or has a typo in the section name. | Compare your JSON against the matching `*_example.json` in `tests/`. |
+| `WARNING : utils : cols.X: configured CSV column 'Y' is not in this file's columns` | Your JSON says to read column `Y` for the `X` field, but `Y` isn't in the CSV. | Fix the spelling on the right-hand side of `"X": "Y"` in your JSON, or run `preflight_check` for a full list of mismatches. |
 | `0/N files scored; skipped N` in the log | Every file failed to score. | Check the log for per-file error traces. Usually one of: the JSON points at column names that aren't in the CSV; the CSV is for a different experiment version. |
 | `FileNotFoundError` when starting | The `out` directory's parent doesn't exist (only the leaf is auto-created). | Create the parent directory by hand, or use an `out` path that's adjacent to existing folders. |
 | GUI file picker pops up unexpectedly | You forgot to pass `filelist=...`. | Pass a list of paths explicitly. |
-| `KeyError` deep inside scoring | Your CSV is missing an expected column. | The JSON config's `cols` block references column names — make sure each one exists in your CSV. |
+| Output trials CSV has only metadata columns | Every `cols.*` mapping pointed at a missing column. | Look for WARNING lines in the log — each one names the misnamed column. |
+| `KeyError` deep inside scoring | Your CSV is missing an expected column that the scoring code requires unconditionally (like `cols.trial`). | Check the required-keys table in [`docs/CONFIGURING.md`](docs/CONFIGURING.md#required-json-keys-per-task). |
 
 ## For contributors
 

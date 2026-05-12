@@ -17,6 +17,7 @@ from mend2np.utils import (
     handle_multiple_responses,
     validate_params,
     run_task,
+    copy_configured_columns,
 )
 
 REQUIRED_PARAMS = {
@@ -41,6 +42,12 @@ DEFAULT_RESP_MAPPING = {
 
 
 def _get_resp_mapping(params: dict) -> dict:
+    """Return the response-key → option-index mapping for this run.
+
+    Prefers `params['resp_mapping']` if the config supplies it (per-experiment
+    custom keys); otherwise falls back to `DEFAULT_RESP_MAPPING` and logs a
+    warning so future configs are encouraged to be explicit.
+    """
     mapping = params.get('resp_mapping')
     if mapping is None:
         logging.getLogger('root').warning(
@@ -87,16 +94,22 @@ def synonyms(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|lis
 
 
 def format_df(df:pd.DataFrame, params:dict, resp_mapping:dict=DEFAULT_RESP_MAPPING) -> pd.DataFrame:
+    """Reshape a raw Synonyms CSV into the library's standard column layout.
+
+    Masks to trial rows, renames per the JSON config, parses list-valued
+    `response`/`rt` cells, then maps the human-readable response cells
+    (keyboard key like `'n'`, or touch label like `'opt1_shape'`) to their
+    integer option index (1-4) via `resp_mapping`. Both `response` and
+    `correct_resp` are normalised through the same mapping so a later
+    `correct_resp in response` comparison works regardless of input form.
+    """
     fmtdf = pd.DataFrame()
     mask = np.invert(df[params['cols']['trial']].isna())
 
-    for metacol in params['metacols']:
-        if params['metacols'][metacol] and params['metacols'][metacol] in df.columns:
-            fmtdf[metacol] = df.loc[mask, params['metacols'][metacol]]
-
-    for col in params['cols']:
-        if params['cols'][col] and params['cols'][col] in df.columns:
-            fmtdf[col] = df.loc[mask, params['cols'][col]]
+    # Copy each metacol & each trial-level col. `copy_configured_columns`
+    # warns when a configured column is missing from the CSV.
+    copy_configured_columns(fmtdf, df, params['metacols'], 'metacols', mask=mask)
+    copy_configured_columns(fmtdf, df, params['cols'], 'cols', mask=mask)
 
     for resp_col in ['response', 'rt']:
         if resp_col in fmtdf.columns:
@@ -131,6 +144,7 @@ def _normalize_resp_list(value, resp_mapping: dict) -> list:
 
 
 def _normalize_rt_list(value) -> list:
+    """Coerce an RT cell into a list of floats (mirror of _normalize_resp_list)."""
     if isinstance(value, list):
         return [float(r) for r in value]
     if value is None:
@@ -186,6 +200,13 @@ def parse_responses(df:pd.DataFrame, resp_mapping:dict=DEFAULT_RESP_MAPPING):
 
 
 def score_df(df:pd.DataFrame, trial_filter:str) -> pd.DataFrame:
+    """Build a 1-row dataframe of per-file Synonyms scores.
+
+    Columns: num_correct, prop_correct, mean_rt, sd_rt, plus the same RT
+    summaries restricted to correct trials and to incorrect trials.
+
+    :param trial_filter: optional pandas query string applied before scoring.
+    """
     score_dict = {}
 
     if trial_filter:

@@ -1,0 +1,2 @@
+id,filename,session,datetime,exp_name,software_version,framerate,os,dominant_n_trials,dominant_mean_rt,dominant_sd_rt,nondominant_n_trials,nondominant_mean_rt,nondominant_sd_rt
+test1,test1_fo.csv,1,2020-01-01_12h00.00.000,FingerOsc_Touch_v3_video,2023.2.2,43.47826087,MacIntel,143,0.1642797202797203,0.016473797203055605,143,0.21952447552447554,0.03287360175740831

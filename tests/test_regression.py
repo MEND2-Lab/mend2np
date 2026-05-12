@@ -33,6 +33,14 @@ DRIVERS = {
     'fept':     ('example_driver_fept.py',     [('fept_scores',     'FEPT_*_scores_*.csv')]),
     'synonyms': ('example_driver_synonyms.py', [('synonyms_scores', 'Synonyms_*_scores_*.csv'),
                                                  ('synonyms_trials', 'Synonyms_*_trials_*.csv')]),
+    # The fingosc driver scores all three CSV layouts (keyboard, touch, stacked)
+    # in one invocation; each variant produces its own set of timestamped output files.
+    'fingosc':  ('example_driver_fingosc.py',  [('fingosc_keyboard_scores', 'FO_updated_new_n2_scores_*.csv'),
+                                                 ('fingosc_keyboard_trials', 'FO_updated_new_n2_trials_*.csv'),
+                                                 ('fingosc_touch_scores',    'FingerOsc_Touch_v3_video_n1_scores_*.csv'),
+                                                 ('fingosc_touch_trials',    'FingerOsc_Touch_v3_video_n1_trials_*.csv'),
+                                                 ('fingosc_stacked_scores',  'fingerosc_soar_2025.2.3_n1_scores_*.csv'),
+                                                 ('fingosc_stacked_trials',  'fingerosc_soar_2025.2.3_n1_trials_*.csv')]),
 }
 
 
@@ -103,6 +111,7 @@ def test_pgng():     _check_task('pgng')
 def test_bart():     _check_task('bart')
 def test_fept():     _check_task('fept')
 def test_synonyms(): _check_task('synonyms')
+def test_fingosc():  _check_task('fingosc')
 
 
 def main() -> int:

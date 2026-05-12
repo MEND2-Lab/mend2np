@@ -16,6 +16,7 @@ from mend2np.utils import (
     handle_multiple_responses,
     validate_params,
     run_task,
+    copy_configured_columns,
 )
 
 REQUIRED_PARAMS = {
@@ -57,16 +58,23 @@ def bart(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list=''
 
 
 def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
+    """Reshape a raw BART CSV into the library's standard column layout.
+
+    Like the other tasks' `format_df`: masks to trial rows, renames per the
+    JSON config, and parses list-valued `response`/`rt` cells. Two BART-
+    specific transforms run after the rename:
+      - The `rt` column (a list of click timestamps per balloon) is converted
+        to a list of *deltas between successive clicks* — i.e. pump latencies.
+      - The `popped` column is coerced to bool so downstream `df['popped']`
+        and `~df['popped']` masks behave predictably.
+    """
     fmtdf = pd.DataFrame()
     mask = np.invert(df[params['cols']['trial']].isna())
 
-    for metacol in params['metacols']:
-        if params['metacols'][metacol] and params['metacols'][metacol] in df.columns:
-            fmtdf[metacol] = df.loc[mask, params['metacols'][metacol]]
-
-    for col in params['cols']:
-        if params['cols'][col] and params['cols'][col] in df.columns:
-            fmtdf[col] = df.loc[mask, params['cols'][col]]
+    # Copy each metacol & each trial-level col. `copy_configured_columns`
+    # warns when a configured column is missing from the CSV.
+    copy_configured_columns(fmtdf, df, params['metacols'], 'metacols', mask=mask)
+    copy_configured_columns(fmtdf, df, params['cols'], 'cols', mask=mask)
 
     # handle multiple responses for touchscreen-based versions
     for resp_col in ['response', 'rt']:
@@ -86,24 +94,29 @@ def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
 
 
 def score_df(df:pd.DataFrame, trial_filter):
-    '''
-    ntrials_popped: number of trials in which the balloon was popped
-    ntrials_unpopped: number of trials in which the balloon was not popped
-    ptrials_popped: proportion of trials in which the balloon was popped
-    ptrials_unpopped: proportion of trials in which the balloon was not popped
-    mean_pumps_popped: average number of pumps for popped trials
-    mean_pumps_unpopped: average number of pumps for unpopped trials
-    mean_rt_unpopped: average response time of all pumps in unpopped trials
-    sd_rt_unpopped: standard deviation of response time of all pumps in unpopped trials
-    total_earnings: total earnings
-    mean_earnings: average earnings
-    popped_ratio: ntrials_popped / ntrials_unpopped
-    post_failure_mean_pumps: average pumps on trials after exploded balloons
-    post_failure_mean_rt: average response time on trials after exploded balloons
-    post_failure_sd_rt: standard deviation of response time on trials after exploded balloons
-    intertrial_variability: standard deviation of total pumps divided by the mean of total pumps
-    post_pumps_loss: average difference between the number of pumps on a loss trial and the immediate subsequent trial where participants elected to collect money prior to a balloon pop
-    '''
+    """Build a 1-row dataframe of per-file BART scores.
+
+    Columns produced:
+      ntrials_popped              — count of trials where the balloon exploded
+      ntrials_unpopped            — count of trials where the participant banked
+      popped_ratio                — ntrials_popped / ntrials_unpopped (NaN if no unpopped)
+      ptrials_popped              — proportion of trials popped
+      ptrials_unpopped            — proportion of trials banked
+      mean_pumps_popped           — mean pumps on popped trials
+      mean_pumps_unpopped         — mean pumps on banked trials
+      mean_rt_unpopped            — mean inter-pump latency across banked trials
+      sd_rt_unpopped              — SD of inter-pump latencies on banked trials
+      total_earnings              — sum of `earnings` column
+      mean_earnings               — mean of `earnings` column
+      intertrial_variability      — SD(nPumps) / mean(nPumps); a normalised risk measure
+      post_failure_mean_pumps     — mean pumps on the trial AFTER a popped trial
+      post_failure_mean_rt        — mean inter-pump RT on the trial after a pop
+      post_failure_sd_rt          — SD inter-pump RT on the trial after a pop
+      post_pumps_loss             — mean of (nPumps_t - nPumps_{t+1}) when t was a pop and t+1 was banked
+
+    :param df: per-trial dataframe.
+    :param trial_filter: if non-empty and `df` has a `trial_type` column, restrict to that value.
+    """
     if trial_filter and 'trial_type' in df.columns:
         df = df.loc[df['trial_type'] == trial_filter]
 
@@ -111,6 +124,9 @@ def score_df(df:pd.DataFrame, trial_filter):
     n_unpopped = int((~df['popped']).sum())
     n_total = len(df['popped'])
     popped_ratio = n_popped / n_unpopped if n_unpopped > 0 else np.nan
+    # Mask: row t was popped AND row t+1 was NOT popped (i.e. participant
+    # successfully banked the trial immediately after a loss). The .shift(-1)
+    # pulls each next-row value into the current row's position.
     popped_after_unpopped = df['popped'] & (df['popped'].shift(-1) == False)
 
     scores = pd.DataFrame({

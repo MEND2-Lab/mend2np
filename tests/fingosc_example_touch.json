@@ -1,0 +1,33 @@
+{
+    "metacols":{
+        "id":"participant",
+        "session":"session",
+        "datetime":"date",
+        "exp_name":"expName",
+        "software_version":"psychopyVersion",
+        "framerate":"frameRate",
+        "os":"OS"
+    },
+    "blocks":{
+        "dominant":{
+            "metavars":{
+                "hand":"dominant"
+            },
+            "cols":{
+                "response":"mouse_Right.clicked_name",
+                "rt":"mouse_Right.time",
+                "trial":"fingerdominanttrial.thisRepN"
+            }
+        },
+        "nondominant":{
+            "metavars":{
+                "hand":"nondominant"
+            },
+            "cols":{
+                "response":"mouse_Left.clicked_name",
+                "rt":"mouse_Left.time",
+                "trial":"fingernondominanttrial.thisRepN"
+            }
+        }
+    }
+}

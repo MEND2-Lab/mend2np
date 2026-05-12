@@ -20,6 +20,7 @@ from mend2np.utils import (
     handle_multiple_responses,
     validate_params,
     run_task,
+    copy_configured_columns,
 )
 
 touch_resp_mapping = {
@@ -99,21 +100,32 @@ def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list=''
 
 
 def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
+    """Reshape a raw PsychoPy SERT CSV into the library's standard column layout.
+
+    Drops non-trial rows by masking on `params['cols']['trial']` (rows where
+    trial number is NaN are skipped — that's how PsychoPy marks header/intro/
+    practice rows). Renames the experiment's columns to standard names per
+    the JSON config, parses list-valued `response`/`rt` cells back into Python
+    lists, and maps touchscreen labels like `'LeftImage'` to integer response
+    codes 1/2/3.
+    """
     fmtdf = pd.DataFrame()
+    # Trial-counter NaN marks non-trial rows; invert to keep only real trials.
     mask = np.invert(df[params['cols']['trial']].isna())
 
-    for metacol in params['metacols']:
-        if params['metacols'][metacol] and params['metacols'][metacol] in df.columns:
-            fmtdf[metacol] = df.loc[mask, params['metacols'][metacol]]
+    # Copy each metacol & each trial-level col that the config names and the CSV
+    # actually has. `copy_configured_columns` warns when a configured column
+    # name is missing from the CSV — typo-debugging aid.
+    copy_configured_columns(fmtdf, df, params['metacols'], 'metacols', mask=mask)
+    copy_configured_columns(fmtdf, df, params['cols'], 'cols', mask=mask)
 
-    for col in params['cols']:
-        if params['cols'][col] and params['cols'][col] in df.columns:
-            fmtdf[col] = df.loc[mask, params['cols'][col]]
-
+    # Cells like "['n']" become Python lists; scalar cells pass through unchanged.
     for resp_col in ['response', 'rt']:
         if resp_col in fmtdf.columns:
             fmtdf[resp_col] = fmtdf[resp_col].apply(lambda x: handle_multiple_responses(x, slice_index=slice(None)))
 
+    # Map touch labels (LeftImage / MiddleImage / RightImage) to 1/2/3 so keyboard
+    # and touch responses share the same integer namespace downstream.
     fmtdf['response'] = fmtdf['response'].apply(
         lambda x: [touch_resp_mapping.get(resp, resp) for resp in x] if isinstance(x, list)
         else touch_resp_mapping.get(x, x)
@@ -122,16 +134,37 @@ def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
 
 
 def add_switch_rep(df:pd.DataFrame) -> pd.DataFrame:
+    """Add `block`, `block_nunique_cues`, and `block_switch_rep` columns.
+
+    The SERT runs in fixed 10-trial blocks. A block with more than one distinct
+    `cue` value contains a cue switch and gets labelled `'switch'`; one with a
+    single cue throughout is `'repeat'`. This block-level label is the primary
+    grouping dimension for switch-cost RT contrasts in `score_df`.
+    """
+    # Integer-divide trial number by 10 (1-indexed) to derive block.
     df['block'] = ((df['trial']) // 10) + 1
+    # `transform('nunique')` broadcasts the per-block unique cue count back onto every row.
     df['block_nunique_cues'] = df.groupby('block')['cue'].transform('nunique')
     df['block_switch_rep'] = np.where(df['block_nunique_cues'] > 1, 'switch', 'repeat')
     return df
 
 
 def parse_choice_value(value:str) -> dict:
+    """Parse a SERT choice-stimulus filename into its semantic components.
+
+    Stimulus filenames look like `safe_apple_orange_oval.png` — class /
+    type tokens / color / shape, separated by spaces, underscores, or hyphens.
+    This function picks them apart, normalising `rectangle` → `rect` and
+    treating unknown shapes/colors as absent. Returns a dict with the four
+    keys `class`, `type`, `color`, `shape`; NaN input maps to all-None.
+
+    Example: `'lethal_red_apple_orange_oval.png'` →
+    `{'class': 'lethal', 'type': 'red_apple', 'color': 'orange', 'shape': 'oval'}`.
+    """
     if pd.isna(value):
         return {'class': None, 'type': None, 'color': None, 'shape': None}
 
+    # Drop the file extension and split on any combination of ` ` `_` `-`.
     raw = str(Path(value).stem)
     tokens = re.split(r'[ _\-]+', raw)
     lower_tokens = [t.lower() for t in tokens]
@@ -165,10 +198,18 @@ def parse_choice_value(value:str) -> dict:
 
 
 def parse_choice_columns(df:pd.DataFrame) -> pd.DataFrame:
+    """For each of `left_choice` / `middle_choice` / `right_choice`, expand into 4 derived cols.
+
+    Each `<side>_choice` column holds a stimulus filename; this function calls
+    `parse_choice_value` on each cell and inserts `<side>_choice_class`,
+    `<side>_choice_type`, `<side>_choice_color`, `<side>_choice_shape` columns
+    next to the original. Sides whose source column isn't present are skipped.
+    """
     for side in ['left', 'middle', 'right']:
         choice_col = f'{side}_choice'
         if choice_col not in df.columns:
             continue
+        # `apply` returns a Series of dicts; second `apply(pd.Series)` expands those dicts to columns.
         parsed = df[choice_col].apply(parse_choice_value).apply(pd.Series)
         parsed.columns = [f'{choice_col}_{suffix}' for suffix in parsed.columns]
         df = pd.concat([df, parsed], axis=1)
@@ -242,7 +283,9 @@ def parse_responses(df:pd.DataFrame) -> pd.DataFrame:
     )
 
     def _correct_rt(rt_list, idx):
-        if pd.isna(idx) or not rt_list:
+        # Defensive: rt_list and resp_list normally have the same length, but bail to
+        # NaN if a participant's CSV row is malformed (e.g. responses without RTs).
+        if pd.isna(idx) or not rt_list or int(idx) >= len(rt_list):
             return np.nan
         return rt_list[int(idx)]
     correct_resp_rt = pd.Series(
@@ -264,6 +307,12 @@ def parse_responses(df:pd.DataFrame) -> pd.DataFrame:
 
 
 def safe_diff(sdict: dict, out_key: str, a_key: str, b_key: str):
+    """Store `sdict[a_key] - sdict[b_key]` at `out_key`, or NaN if either is missing.
+
+    Used to compute switch-cost differences when one of the input metrics
+    may not have been produced (e.g. a participant had no `repeat` trials of
+    a given cue, so `{prefix}_repeat_{metric}` was never written).
+    """
     if a_key in sdict and b_key in sdict:
         sdict[out_key] = sdict[a_key] - sdict[b_key]
     else:
@@ -271,7 +320,13 @@ def safe_diff(sdict: dict, out_key: str, a_key: str, b_key: str):
 
 
 def _bucket_metrics(score_dict: dict, prefix: str, group: pd.DataFrame) -> None:
-    """Write the standard bucket metric set into score_dict under `prefix`."""
+    """Write the standard bucket metric set into score_dict under `prefix`.
+
+    Computes nine numbers: trial count, correct count, accuracy, mean/median/SD
+    of first-response RT, and mean/median/SD of correct-response RT. Used at
+    each level of the (event_type × switch_rep × cue) score grid so every
+    bucket emits the same columns under its own `<event_type>_<switch_rep>_<cue>_…` prefix.
+    """
     correct_only = group.loc[group['correct'] == 1, 'correct_resp_rt']
     score_dict[f'{prefix}_num_trials'] = len(group)
     score_dict[f'{prefix}_num_correct'] = group['correct'].sum()
@@ -285,6 +340,20 @@ def _bucket_metrics(score_dict: dict, prefix: str, group: pd.DataFrame) -> None:
 
 
 def score_df(df:pd.DataFrame, trial_filter:str) -> pd.DataFrame:
+    """Build a 1-row dataframe of per-file SERT scores.
+
+    Walks three nested groupings:
+      1. By `event_type` (the experiment-defined trial categorization).
+      2. By `block_switch_rep` (`switch` vs `repeat` block).
+      3. By `cue` (the within-trial cue value, e.g. color/shape/lethality).
+    `_bucket_metrics` is called at every level so the output has metrics at
+    every grain. After the per-bucket metrics are written, switch-cost
+    differences (`switch - repeat`) are computed for each `(cue, metric)`
+    combination via `safe_diff`.
+
+    :param df: the per-trial dataframe (already populated by parse_responses + add_switch_rep).
+    :param trial_filter: optional pandas query string applied before scoring.
+    """
     score_dict = {}
 
     if trial_filter:

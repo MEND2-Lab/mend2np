@@ -1,0 +1,38 @@
+{
+    "_comment_shape": "Use this config shape when both FO blocks share the same trial column names and are stacked vertically in the CSV — block membership is inferred by counting `block_marker_col` non-null rows before each trial. See test4_fo.csv as the canonical example.",
+    "metacols":{
+        "id":"participant",
+        "session":"session",
+        "datetime":"date",
+        "exp_name":"expName",
+        "software_version":"psychopyVersion",
+        "framerate":"frameRate",
+        "os":"OS"
+    },
+    "blocks":{
+        "dominant":{
+            "metavars":{
+                "hand":"dominant",
+                "block_index":0,
+                "block_marker_col":"blocks.thisN"
+            },
+            "cols":{
+                "response":"trial_spacebar.keys",
+                "rt":"trial_spacebar.rt",
+                "trial":"trials.thisRepN"
+            }
+        },
+        "nondominant":{
+            "metavars":{
+                "hand":"nondominant",
+                "block_index":1,
+                "block_marker_col":"blocks.thisN"
+            },
+            "cols":{
+                "response":"trial_spacebar.keys",
+                "rt":"trial_spacebar.rt",
+                "trial":"trials.thisRepN"
+            }
+        }
+    }
+}

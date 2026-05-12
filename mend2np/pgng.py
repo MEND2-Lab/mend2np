@@ -7,6 +7,7 @@ omission / commission / etc.), adjusts response times across trial boundaries,
 and aggregates per-block summary scores.
 '''
 import logging
+import math
 import os
 import traceback
 import pandas as pd
@@ -21,6 +22,7 @@ from mend2np.utils import (
     handle_multiple_responses,
     validate_params,
     run_task,
+    copy_configured_columns,
 )
 
 # Module-level logger reference. `setup_logger` configures the same root logger,
@@ -200,13 +202,21 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
                 if metacol.startswith('_'):
                     continue
                 csv_col = params['metacols'][metacol]
-                if csv_col and csv_col in df.columns:
+                if not csv_col:
+                    continue
+                if csv_col in df.columns:
                     idx = df[csv_col].first_valid_index()
                     metacol_values[metacol] = df.at[idx, csv_col] if idx is not None else None
+                else:
+                    logger.warning(
+                        f"metacols.{metacol}: configured CSV column '{csv_col}' is not in "
+                        f"this file's columns — '{metacol}' will be missing for block {block}."
+                    )
 
-            for col in params['blocks'][block]['cols']:
-                if params['blocks'][block]['cols'][col] and params['blocks'][block]['cols'][col] in df.columns:
-                    tmpdf[col] = df.loc[mask,params['blocks'][block]['cols'][col]]
+            # Per-block trial-level columns. `copy_configured_columns` warns when
+            # a configured column name is missing from the CSV.
+            copy_configured_columns(tmpdf, df, params['blocks'][block]['cols'],
+                                    f'blocks.{block}.cols', mask=mask, logger=logger)
 
             # Now that tmpdf has rows (one per trial after the mask), broadcast each
             # per-participant metacol value across them, and reorder so metacols come
@@ -226,10 +236,17 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
                     else:
                         tmpdf[metavar] = params['blocks'][block]['metavars'][metavar]
 
+            # Optional: stamp a single exp_start onto every row. Guard against a
+            # totally-empty column — the original code did `.dropna().values[0]`
+            # which IndexErrors when every row is NaN.
             if 'exp_start' in params['metacols']:
-                tmpdf['exp_start'] = df[params['metacols']['exp_start']].dropna().values[0]
+                exp_start_col = params['metacols']['exp_start']
+                if exp_start_col and exp_start_col in df.columns:
+                    valid = df[exp_start_col].dropna()
+                    if len(valid) > 0:
+                        tmpdf['exp_start'] = valid.values[0]
 
-            # for gs, update stim_dur to correct times
+            # For Go/Stop blocks, the actual stop time supersedes the static stim_dur.
             if 'stop_time' in params['blocks'][block]['cols']:
                 tmpdf['stim_dur'] = df.loc[mask,params['blocks'][block]['cols']['stop_time']]
 
@@ -259,12 +276,25 @@ def format_df(df:pd.DataFrame,params:dict,platform:str) -> pd.DataFrame:
                             if tmpdf.loc[i,'response'] not in tmpdf.loc[i,'resp_key'] and abs(tmpdf.loc[i,rt_col]) < 1e-9:
                                 tmpdf.loc[i,rt_col] = np.nan
 
-            # if stim_start does not exist, estimate it
-            if not 'stim_start' in tmpdf.columns and 'exp_start' in tmpdf.columns and 'stim_dur' in tmpdf.columns:
-                stim_start_vals = np.arange(tmpdf['exp_start'].values[0]+tmpdf['start_delta'].values[0], tmpdf['exp_start'].values[0]+tmpdf['start_delta'].values[0]+(len(tmpdf)*tmpdf['stim_dur'].values[0]), tmpdf['stim_dur'].values[0])
-                tmpdf['stim_start'] = stim_start_vals[0:len(tmpdf)]
+            # If stim_start wasn't supplied, estimate it from exp_start + a static stim_dur
+            # step. Requires `start_delta` (the pre-trial offset) to also be present —
+            # if it isn't, log and skip estimation rather than KeyError.
+            if (not 'stim_start' in tmpdf.columns
+                    and 'exp_start' in tmpdf.columns
+                    and 'stim_dur' in tmpdf.columns):
+                if 'start_delta' in tmpdf.columns:
+                    start = tmpdf['exp_start'].values[0] + tmpdf['start_delta'].values[0]
+                    step = tmpdf['stim_dur'].values[0]
+                    stim_start_vals = np.arange(start, start + len(tmpdf) * step, step)
+                    tmpdf['stim_start'] = stim_start_vals[0:len(tmpdf)]
+                else:
+                    logger.debug(
+                        "cannot estimate 'stim_start': 'start_delta' column not in tmpdf; "
+                        "include a stim_start column in the config to suppress this."
+                    )
 
-            #tmpdf['block'] = block
+            # For PsychoPy data, stamp the current block label onto every row. For
+            # E-Prime data the block column was already brought across via the cols loop.
             if platform == 'psychopy':
                 tmpdf['block'] = block
 
@@ -572,22 +602,15 @@ def onsets(df:pd.DataFrame) -> pd.DataFrame:
     return df
 
 def score_df(df:pd.DataFrame) -> pd.DataFrame:
-    '''
-    '''
-    # # setup meta columns
-    # df_scores = pd.DataFrame({
-    #         'filename':df['filename'].head(1).values[0],
-    #         'id':df['id'].head(1).values[0],
-    #         'session':df['session'].head(1).values[0],
-    #         'datetime':df['datetime'].head(1).values[0],
-    #         'exp_name':df['exp_name'].head(1).values[0],
-    #         'software_version':df['software_version'].head(1).values[0],
-    #         'framerate':df['framerate'].head(1).values[0]
-    #         },
-    #         index=[0]).reset_index(drop=True)
+    """Build one row of per-file PGNG scores by horizontally concatenating per-block scores.
 
+    Groups the per-trial dataframe by `block`, dispatches each block to the
+    type-specific scorer (`score_go` / `score_gng` / `score_gs`), and joins
+    every block's column set side-by-side into a single 1-row dataframe. Blocks
+    with an unrecognized `type` value are skipped.
+    """
     df_scores = pd.DataFrame(index=[0])
-    
+
     for _, blk in df.groupby('block'):
         if blk['type'].values[0] == 'go':
             df_scores = pd.concat([df_scores,score_go(blk).reset_index(drop=True)],axis=1)
@@ -596,9 +619,10 @@ def score_df(df:pd.DataFrame) -> pd.DataFrame:
         elif blk['type'].values[0] == 'gs':
             df_scores = pd.concat([df_scores,score_gs(blk).reset_index(drop=True)],axis=1)
         else:
-            #TODO add error logging
+            # Unknown block type — log and skip instead of crashing.
+            logger.warning(f"unknown block type {blk['type'].values[0]!r}; skipping")
             continue
-    
+
     return df_scores
 
 def _safe_ratio(numer: int, denom: int):
@@ -690,10 +714,16 @@ def score_gs(block:pd.DataFrame):
 
     return block_scores
 
-def cov_df(df:pd.DataFrame,window_duration:float):
-    '''
-    coefficient of variation
-    '''
+def cov_df(df:pd.DataFrame, window_duration:float):
+    """Coefficient-of-variation over sliding time windows of `window_duration` seconds.
+
+    Currently unused (the `cov` kwarg path in `pgng()` is commented out) but
+    preserved for fMRI-style analyses that want per-window RT-mean/RT-SD/CoV.
+    Within each block, walks contiguous windows from `stim_start_adj` of the
+    first trial to the last trial's offset, and for each window that contains
+    at least one hit, builds a row with: window bounds, hit count, mean RT,
+    SD RT, and CoV (= SD / mean).
+    """
     df_cov = pd.DataFrame()
     for _, block in df.groupby('block'):
 
