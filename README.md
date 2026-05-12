@@ -2,16 +2,18 @@
 
 Python scoring scripts for behavioural CSV data from neuropsych tasks run in the MEND2 lab. Reads PsychoPy / E-Prime CSV output, applies experiment-version-specific column mappings via a JSON config, and writes aggregated trial-level and score-level CSVs.
 
-Six tasks are supported:
+Eight tasks are supported:
 
 | Task | What it measures | Example config |
 | --- | --- | --- |
 | **sert** | Suicide Emotion Rigidity Task; per-cue accuracy and switch cost RTs | [`tests/sert_example.json`](tests/sert_example.json) |
-| **pgng** | Parametric Go / No-go / Stop; hit / miss / commission counts and RTs per block | (driver script — see [`tests/example_driver_pgng.py`](tests/example_driver_pgng.py)) |
-| **bart** | Balloon Analogue Risk Task; pumps, pops, earnings, post-failure caution | (driver script — see [`tests/example_driver_bart.py`](tests/example_driver_bart.py)) |
-| **fept** | Facial Emotion Perception Task; per-emotion / race / sex / animal accuracy and misclassification counts | (driver script — see [`tests/example_driver_fept.py`](tests/example_driver_fept.py)) |
+| **pgng** | Parametric Go / No-go / Stop; hit / miss / commission counts and RTs per block | [`tests/pgng_example.json`](tests/pgng_example.json) |
+| **bart** | Balloon Analogue Risk Task; pumps, pops, earnings, post-failure caution | [`tests/bart_example.json`](tests/bart_example.json) |
+| **fept** | Facial Emotion Perception Task; per-emotion / race / sex / animal accuracy and misclassification counts | [`tests/fept_example.json`](tests/fept_example.json) |
 | **synonyms** | Synonym matching; accuracy and RT by correctness | [`tests/synonyms_example.json`](tests/synonyms_example.json) |
 | **fingosc** | Finger Oscillation; mean and SD of tap RT per block (dominant vs non-dominant hand) | [`tests/fingosc_example.json`](tests/fingosc_example.json) (keyboard); also `fingosc_example_touch.json` and `fingosc_example_stacked.json` |
+| **smid** | Social Monetary Incentive Delay; per-condition (self / charity × gain / lose / neither × small / big) probe-response counts and RTs, with the participant's charity & rep carried through | [`tests/smid_example.json`](tests/smid_example.json) |
+| **stroop** | Classic + emotional Stroop (alternating blocks); per `test × condition` n-trials / accuracy / RTs, plus Stroop-interference contrast scores | [`tests/stroop_example.json`](tests/stroop_example.json) (keyboard); also `stroop_example_touch.json` |
 
 ## Requirements
 

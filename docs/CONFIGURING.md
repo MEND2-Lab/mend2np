@@ -34,8 +34,12 @@ Find the example file in `tests/` that matches your task:
 - `sert_example.json` for SERT (keyboard responses)
 - `sert_example_touch.json` for SERT (touchscreen)
 - `pgng_example.json` for PGNG
+- `bart_example.json` for BART
+- `fept_example.json` for FEPT
 - `synonyms_example.json` for synonyms
-- (BART and FEPT configs live in their Python driver scripts at `tests/example_driver_bart.py` / `_fept.py` — copy the `params = { ... }` block from there.)
+- `fingosc_example.json` for Finger Oscillation (keyboard, wide-format); also `fingosc_example_touch.json` (mouse/touch) and `fingosc_example_stacked.json` (single-column-set layout)
+- `smid_example.json` for SMID
+- `stroop_example.json` for Stroop (keyboard); also `stroop_example_touch.json`
 
 Save your copy somewhere outside `tests/` (e.g. `my_configs/sert_v9.json`) so you don't accidentally modify the example.
 
@@ -128,7 +132,7 @@ In the tables: **REQ** = the scoring code fails or silently produces nothing wit
 | `cols.left_choice`, `middle_choice`, `right_choice` | OPT | Each gets expanded into `_class`/`_type`/`_color`/`_shape` derived columns |
 | `cols.stim_onset`, `stim_offset`, `iti_onset`, `iti_offset`, `iti_dur`, `cue_dur`, `stim_with_cue_dur` | OPT | Passed through to trials output for timing analysis |
 
-### pgng ([example driver](../tests/example_driver_pgng.py))
+### pgng ([example](../tests/pgng_example.json))
 
 PGNG nests its configuration under `params['blocks']` — every block must be configured independently.
 
@@ -148,7 +152,7 @@ PGNG nests its configuration under `params['blocks']` — every block must be co
 | `blocks.<B>.metavars.stim_dur` | OPT but recommended | Static stimulus duration; needed when CSV lacks a `stim_start` column |
 | `blocks.<B>.metavars.stop` | **REQ for `gs` blocks** | Filename of the stop stimulus |
 
-### bart ([example driver](../tests/example_driver_bart.py))
+### bart ([example](../tests/bart_example.json))
 
 | Key | Required? | Drives... |
 | --- | --- | --- |
@@ -160,7 +164,7 @@ PGNG nests its configuration under `params['blocks']` — every block must be co
 | `cols.earnings` | **REQ for scores** | Per-trial money won |
 | `cols.rt` | **REQ for RT scores** | List of click-time series, converted to pump-latency deltas in `format_df` |
 
-### fept ([example driver](../tests/example_driver_fept.py))
+### fept ([example](../tests/fept_example.json))
 
 | Key | Required? | Drives... |
 | --- | --- | --- |
@@ -174,6 +178,58 @@ PGNG nests its configuration under `params['blocks']` — every block must be co
 | `blocks.<B>.metavars.stimulus_duration`, `mask_duration` | OPT | Used to compute `rt_global` |
 | `blocks.<B>.key_labels` | OPT | Maps raw keypress codes (`'k'`, `'space'`) to readable labels (`'happy'`, `'sad'`) for misclassification reporting |
 | `blocks.<B>.stim_class_map` | OPT | Per-category regex map (emotion / race / sex / etc.) — without it, per-category scores are skipped |
+
+### stroop ([example](../tests/stroop_example.json))
+
+Stroop alternates classic and emotional sub-blocks within one data stream — the `test` column on each row tells you which kind of trial it was. The config is flat (one set of `cols`, not per-block). Both keyboard and touch CSVs are supported by swapping `cols.response` / `cols.rt` and using the same `resp_mapping` (which standardizes keyboard keys and touch shape names to a shared 1/2/3 option-int namespace, same approach as synonyms). Correctness is derived from the stimulus colour via `color_correct_mapping` — the bundled CSVs don't ship an explicit correct-response column for real trials.
+
+| Key | Required? | Drives... |
+| --- | --- | --- |
+| `metacols.id` | OPT but recommended | Participant ID + filename `nN` |
+| `metacols.*` | OPT | Standard metadata carried into output |
+| `cols.trial` | **REQ** | Mask of trial rows |
+| `cols.test` | **REQ for scores** | Block-type axis (`classic` vs `emotional`) in the score grid |
+| `cols.condition` | **REQ for scores** | Condition axis (`congruent`/`incongruent`/`neutral` for classic; `negative`/`positive`/`neutral` for emotional) |
+| `cols.this_color` | **REQ for correctness** | Combined with `color_correct_mapping` to derive `correct_opt`. Without this, `correct` / `prop_correct` / RT-by-correctness scores are all NaN. |
+| `cols.this_word` | OPT | Carried into trials output |
+| `cols.this_duration`, `block`, `subblock`, `subblock_type`, `change_color`, `emot_color_switch` | OPT | Per-trial condition identifiers carried into trials output for downstream analysis |
+| `cols.response` | **REQ for scores** | Source of `response_first`/`last`; map through `resp_mapping` to derive the option int |
+| `cols.rt` | **REQ for RT scores** | Source of `rt_first`/`last`. Stroop convention: scoring uses `rt_first` (the initial reaction). |
+| `cols.correct_resp` | OPT | If your CSV has an explicit correct-response column, set this and the colour-mapping path is skipped. |
+| `resp_mapping` | OPT (recommended) | Top-level dict mapping response labels → option ints. Without it, a default mapping covering `j`/`k`/`l` and `trial_opt{1,2,3}_shape` / `prac_opt{1,2,3}_shape` is used (and a warning logged). |
+| `color_correct_mapping` | **REQ for correctness** | Top-level dict mapping `this_color` values → the correct option int. Example: `{"blue": 1, "saddlebrown": 2, "hotpink": 3}`. |
+
+The score column names follow `<test>_<condition>_<metric>` — for example `classic_incongruent_mean_rt_correct`, `emotional_negative_prop_correct`. Three derived columns capture standard Stroop-interference contrasts (on mean correct-RT):
+
+- `classic_stroop_interference_rt` = `classic_incongruent_mean_rt_correct − classic_congruent_mean_rt_correct` (the classic Stroop effect — typically ~100-200 ms for healthy adults)
+- `emotional_negative_interference_rt` = `emotional_negative_mean_rt_correct − emotional_neutral_mean_rt_correct`
+- `emotional_positive_interference_rt` = `emotional_positive_mean_rt_correct − emotional_neutral_mean_rt_correct`
+
+The trial-level output preserves every per-trial condition identifier you listed (`this_word`, `this_color`, `this_duration`, `test`, `subblock`, `subblock_type`, `condition`, `change_color`, `emot_color_switch`) so you can compute additional breakdowns (e.g. by `change_color` or `emot_color_switch`) directly with pandas without re-running the scorer.
+
+### smid ([example](../tests/smid_example.json))
+
+SMID has two blocks — practice (`p`-prefixed PsychoPy columns) and real (unprefixed). Both share the same `metacols` (including the participant's selected `charity_name` and `staff_name`, which are carried through to both outputs). Per-block columns name the prime image, benefactor, probe key/RT, etc.
+
+| Key | Required? | Drives... |
+| --- | --- | --- |
+| `metacols.id` | OPT but recommended | Participant ID + filename `nN` |
+| `metacols.charity_name` | OPT but recommended | Carried into trials + scores so each row knows who the participant was working for |
+| `metacols.staff_name` | OPT but recommended | Same — the charity representative the participant chose |
+| `metacols.*` | OPT | Standard metadata carried into output |
+| `blocks.<B>.cols.trial` | **REQ** | Per-block mask of trial rows |
+| `blocks.<B>.cols.prime` | **REQ for scores** | Image filename — decoded into `reward_type` (gain/lose/neither) + `amount` (0/0.2/5) |
+| `blocks.<B>.cols.benefactor` | **REQ for scores** | `'YOURSELF'` → non-social (self), `'NAME'` → social (charity) |
+| `blocks.<B>.cols.probe_rt` | **REQ for RT scores** | Source of `mean_rt`, `sd_rt`. Non-null RT also serves as the fallback "correct" signal when `probe_response` is absent. |
+| `blocks.<B>.cols.probe_response` | OPT but preferred | Explicit boolean for correctness on real trials. Auto-fallback chain: this → `probe_rt.notna()` → `feedback_correct.notna()`. |
+| `blocks.<B>.cols.feedback_correct`, `feedback_incorrect`, `feedback_spoiled` | OPT | Passed through to trials output; also used as a last-resort "correct" fallback for older CSV variants that don't record probe_response or probe_rt. |
+| `blocks.<B>.cols.probe_key`, `pre_key`, `post_probe_key` | OPT | Carried into trials output for downstream inspection |
+| `blocks.<B>.cols.probe_duration`, `self_earnings`, `charity_earnings` | OPT | Per-trial bookkeeping passed through to trials output |
+| `blocks.<B>.metavars.phase` | OPT (recommended) | Static label broadcast onto every row of the block; useful for filtering downstream |
+
+The score column names follow the pattern `<social>_<type>[_<amount>]_<metric>`. For example: `self_gain_big_mean_rt`, `charity_lose_small_n_probes`, `self_neither_prop_correct` (`_<amount>` is suppressed for `neither` trials since they always have amount=0). The block name is not used as a prefix since practice trials are filtered out before scoring, leaving only the single "real" block.
+
+**Practice trials are excluded from the scores output** (rows where `metavars.phase == 'practice'` are dropped before scoring). They still appear in the trials-level output, just not in the aggregate scores. If you want practice trials scored too, set their block's `metavars.phase` to something other than `"practice"`.
 
 ### fingosc ([example](../tests/fingosc_example.json))
 

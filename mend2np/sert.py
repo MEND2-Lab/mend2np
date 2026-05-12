@@ -15,7 +15,6 @@ import pandas as pd
 import numpy as np
 from mend2np.utils import (
     setup_logger,
-    write_out,
     get_meta_cols,
     handle_multiple_responses,
     validate_params,
@@ -94,7 +93,7 @@ def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list=''
         return df, scores_row
 
     return run_task(
-        params=params, filelist=filelist, out=out, write=write, log=log,
+        params=params, filelist=filelist, out=out, write=write,
         process_file_fn=process_one,
     )
 

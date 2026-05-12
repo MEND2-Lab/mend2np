@@ -85,7 +85,7 @@ def pgng(params:dict, formatted:bool=False, out:str=os.getcwd(), write:bool=True
         return df, scores_row
 
     return run_task(
-        params=params, filelist=filelist, out=out, write=write, log=log,
+        params=params, filelist=filelist, out=out, write=write,
         process_file_fn=process_one,
     )
 

@@ -194,7 +194,7 @@ def _resolve_filelist(filelist, logger) -> list:
     return list(select_files())
 
 
-def run_task(*, params, filelist, out, write, log, process_file_fn,
+def run_task(*, params, filelist, out, write, process_file_fn,
              write_trials:bool=True, write_scores:bool=True) -> tuple:
     """Generic per-file processing loop shared by every task module.
 
@@ -204,7 +204,8 @@ def run_task(*, params, filelist, out, write, log, process_file_fn,
     Exceptions raised inside the callable are logged and the file is skipped.
 
     Returns `(combined_scores, combined_trials)`. The caller is responsible for
-    setting up the logger (so log-level / module-name choices remain task-local).
+    setting up the logger via `setup_logger` *before* calling this — `run_task`
+    just reads the root logger; it doesn't configure log level itself.
     """
     os.makedirs(out, exist_ok=True)
     logger = logging.getLogger('root')
@@ -327,7 +328,7 @@ def preflight_check(params:dict, filelist:list, task:str, *, verbose:bool=True) 
     :returns: dict mapping each CSV path to a list of `(config_path, csv_col)`
         tuples describing every missing reference. An empty list means that CSV is fine.
     """
-    valid_tasks = ('sert', 'pgng', 'bart', 'fept', 'synonyms', 'fingosc')
+    valid_tasks = ('sert', 'pgng', 'bart', 'fept', 'synonyms', 'fingosc', 'smid', 'stroop')
     if task not in valid_tasks:
         raise ValueError(f"task must be one of {valid_tasks}, got {task!r}")
 
@@ -345,7 +346,7 @@ def preflight_check(params:dict, filelist:list, task:str, *, verbose:bool=True) 
                 continue
             if isinstance(v, str) and v:
                 expected_refs.append((f'cols.{k}', v))
-    if task in ('pgng', 'fept', 'fingosc') and 'blocks' in params and isinstance(params['blocks'], dict):
+    if task in ('pgng', 'fept', 'fingosc', 'smid') and 'blocks' in params and isinstance(params['blocks'], dict):
         for block_key, block_cfg in params['blocks'].items():
             if isinstance(block_key, str) and block_key.startswith('_'):
                 continue

@@ -1,3 +1,0 @@
-id,filename,session,datetime,exp_name,software_version,framerate,os,dominant_n_trials,dominant_mean_rt,dominant_sd_rt,nondominant_n_trials,nondominant_mean_rt,nondominant_sd_rt
-test2,test2_fo.csv,1,2020-01-01_12h00.00.000,FO_updated_new,2020.1.2,60,Win32,144,0.1771201388888889,0.13034995209500225,144,0.2219173611111111,0.34062792352344906
-test3,test3_fo.csv,1,2020-01-01_12h00.00.000,FO_updated_new,2020.1.2,60,Win32,144,0.12434236111111109,0.048343694608213215,144,0.17431527777777778,0.03779535310069501

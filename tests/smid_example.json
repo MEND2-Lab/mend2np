@@ -1,0 +1,55 @@
+{
+    "metacols":{
+        "id":"participant",
+        "session":"session",
+        "datetime":"date",
+        "exp_name":"expName",
+        "software_version":"psychopyVersion",
+        "framerate":"frameRate",
+        "os":"OS",
+        "charity_name":"charity_name",
+        "staff_name":"staff_name"
+    },
+    "blocks":{
+        "practice":{
+            "_comment":"Practice block uses the `p`-prefixed PsychoPy column names.",
+            "metavars":{
+                "phase":"practice"
+            },
+            "cols":{
+                "trial":"ptrials.thisN",
+                "benefactor":"pbenefactor",
+                "prime":"pPrime",
+                "probe_key":"pprobe_key_response.keys",
+                "probe_rt":"pprobe_key_response.rt",
+                "pre_key":"ppre_key_response.keys",
+                "_post_probe_key_note":"Practice and real share post_probe_key_response.keys (the row mask separates them), so this entry intentionally maps the same column as the real block does.",
+                "post_probe_key":"post_probe_key_response.keys",
+                "feedback_correct":"pFeedbackCorrect",
+                "feedback_incorrect":"pFeedbackIncorrect",
+                "feedback_spoiled":"pFeedbackSpoiled"
+            }
+        },
+        "real":{
+            "metavars":{
+                "phase":"real"
+            },
+            "cols":{
+                "trial":"trials.thisN",
+                "benefactor":"benefactor",
+                "prime":"Prime",
+                "probe_response":"probe_response",
+                "probe_key":"probe_key_response.keys",
+                "probe_rt":"probe_key_response.rt",
+                "pre_key":"pre_key_response.keys",
+                "post_probe_key":"post_probe_key_response.keys",
+                "feedback_correct":"FeedbackCorrect",
+                "feedback_incorrect":"FeedbackIncorrect",
+                "feedback_spoiled":"FeedbackSpoiled",
+                "probe_duration":"probe_duration",
+                "self_earnings":"self_earnings",
+                "charity_earnings":"charity_earnings"
+            }
+        }
+    }
+}

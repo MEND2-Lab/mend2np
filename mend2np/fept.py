@@ -12,7 +12,7 @@ import os
 import re
 from mend2np.utils import (
     setup_logger,
-    write_out,
+    write_out,  # used by the `ind=True` per-file writes
     get_meta_cols,
     handle_multiple_responses,
     validate_params,
@@ -55,7 +55,7 @@ def fept(params:dict, formatted:bool=False, out:str=os.getcwd(), write:bool=True
         return None, scores_row  # fept historically writes only scores, not trials
 
     combined_scores, _ = run_task(
-        params=params, filelist=filelist, out=out, write=write, log=log,
+        params=params, filelist=filelist, out=out, write=write,
         process_file_fn=process_one,
         write_trials=False, write_scores=True,
     )

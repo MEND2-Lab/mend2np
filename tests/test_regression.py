@@ -41,6 +41,14 @@ DRIVERS = {
                                                  ('fingosc_touch_trials',    'FingerOsc_Touch_v3_video_n1_trials_*.csv'),
                                                  ('fingosc_stacked_scores',  'fingerosc_soar_2025.2.3_n1_scores_*.csv'),
                                                  ('fingosc_stacked_trials',  'fingerosc_soar_2025.2.3_n1_trials_*.csv')]),
+    'smid':     ('example_driver_smid.py',     [('smid_scores', 'SMID_n4_scores_*.csv'),
+                                                 ('smid_trials', 'SMID_n4_trials_*.csv')]),
+    # The stroop driver runs the keyboard config (test1+test2) and the touch
+    # config (test3) in one invocation; each produces its own output set.
+    'stroop':   ('example_driver_stroop.py',   [('stroop_keyboard_scores', 'stroop_*_n2_scores_*.csv'),
+                                                 ('stroop_keyboard_trials', 'stroop_*_n2_trials_*.csv'),
+                                                 ('stroop_touch_scores',    'stroop_*_n1_scores_*.csv'),
+                                                 ('stroop_touch_trials',    'stroop_*_n1_trials_*.csv')]),
 }
 
 
@@ -112,6 +120,8 @@ def test_bart():     _check_task('bart')
 def test_fept():     _check_task('fept')
 def test_synonyms(): _check_task('synonyms')
 def test_fingosc():  _check_task('fingosc')
+def test_smid():     _check_task('smid')
+def test_stroop():   _check_task('stroop')
 
 
 def main() -> int:
