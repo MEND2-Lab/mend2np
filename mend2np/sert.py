@@ -118,6 +118,12 @@ def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
     copy_configured_columns(fmtdf, df, params['metacols'], 'metacols', mask=mask)
     copy_configured_columns(fmtdf, df, params['cols'], 'cols', mask=mask)
 
+    # Normalize cue labels that vary across task versions. Some CSVs record the
+    # lethality cue as 'lethal'; standardise to 'lethality' so score column names
+    # and switch-cost contrasts are consistent across all participants.
+    if 'cue' in fmtdf.columns:
+        fmtdf['cue'] = fmtdf['cue'].replace({'lethal': 'lethality'})
+
     # Cells like "['n']" become Python lists; scalar cells pass through unchanged.
     for resp_col in ['response', 'rt']:
         if resp_col in fmtdf.columns:

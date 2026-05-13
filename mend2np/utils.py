@@ -163,9 +163,11 @@ def handle_multiple_responses(value, slice_index=0):
         if isinstance(eval_value, list):
             if len(eval_value) > 0:
                 return eval_value[slice_index]
-            # Empty list: return it as a list rather than the original "[]" string,
-            # so downstream callers can treat it uniformly with the non-empty case.
-            return eval_value
+            # Empty list means no response was recorded. When the caller wants a
+            # scalar (integer slice_index), return NaN so CSV output stays blank
+            # rather than writing the string '[]'. When the caller wants the whole
+            # list (slice_index=slice(None)), return [] so they can test len()==0.
+            return float('nan') if isinstance(slice_index, int) else eval_value
 
     return value
 

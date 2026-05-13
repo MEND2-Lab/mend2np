@@ -159,6 +159,16 @@ def format_df(df:pd.DataFrame, params:dict, resp_mapping:dict, color_correct_map
     copy_configured_columns(fmtdf, df, params['metacols'], 'metacols', mask=mask, logger=logger)
     copy_configured_columns(fmtdf, df, params['cols'], 'cols', mask=mask, logger=logger)
 
+    # Recode the `test` column using an optional config dict.  Each key maps a
+    # raw subblock_type string to a canonical label (e.g. 'classic'/'emotional').
+    # A '_default' key acts as a catch-all for any value not listed explicitly.
+    if 'test' in fmtdf.columns and 'test_mapping' in params:
+        mapping = params['test_mapping']
+        default = mapping.get('_default')
+        fmtdf['test'] = fmtdf['test'].apply(
+            lambda v: mapping.get(str(v), default) if pd.notna(v) else v
+        )
+
     # Parse list-string cells like `'["l","j"]'` into actual Python lists.
     # We pass slice(None) to keep the entire list — multiple-response trials need
     # both first and last for later inspection, and rt list is parsed the same way.
