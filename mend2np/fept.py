@@ -33,11 +33,11 @@ def fept(params:dict, formatted:bool=False, out:str=os.getcwd(), write:bool=True
     :param params: configuration dict (see `tests/example_driver_fept.py`).
     :param formatted: True if the input is already tidy with standard column names.
     :param out: output directory.
-    :param write: if True, write the combined scores CSV.
+    :param write: if True, write combined trials + scores CSVs.
     :param filelist: list of CSV paths, path to a text file with one CSV per line, or empty for GUI picker.
     :param log: log level.
     :param ind: if True, also write a per-file CSV for each input.
-    :returns: combined_scores dataframe.
+    :returns: (combined_scores, combined_trials).
     """
     setup_logger(name='root', out=out, level=log).info('start')
     validate_params(params, REQUIRED_PARAMS)
@@ -52,14 +52,12 @@ def fept(params:dict, formatted:bool=False, out:str=os.getcwd(), write:bool=True
                 write_out(df, out, False, 'csv')
         scores_row = pd.concat([get_meta_cols(df, params), score_df(df)], axis=1)
         scores_row.insert(1, 'filename', filename)
-        return None, scores_row  # fept historically writes only scores, not trials
+        return df, scores_row
 
-    combined_scores, _ = run_task(
+    return run_task(
         params=params, filelist=filelist, out=out, write=write,
         process_file_fn=process_one,
-        write_trials=False, write_scores=True,
     )
-    return combined_scores
 
 
 def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:

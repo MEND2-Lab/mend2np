@@ -30,7 +30,8 @@ DRIVERS = {
                                                  ('pgng_trials',     'PGNGS_*_trials_*.csv')]),
     'bart':     ('example_driver_bart.py',     [('bart_scores',     'BART_*_scores_*.csv'),
                                                  ('bart_trials',     'BART_*_trials_*.csv')]),
-    'fept':     ('example_driver_fept.py',     [('fept_scores',     'FEPT_*_scores_*.csv')]),
+    'fept':     ('example_driver_fept.py',     [('fept_scores',     'FEPT_*_scores_*.csv'),
+                                                 ('fept_trials',     'FEPT_*_trials_*.csv')]),
     'synonyms': ('example_driver_synonyms.py', [('synonyms_scores', 'Synonyms_*_scores_*.csv'),
                                                  ('synonyms_trials', 'Synonyms_*_trials_*.csv')]),
     # The fingosc driver scores all three CSV layouts (keyboard, touch, stacked)

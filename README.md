@@ -4,16 +4,16 @@ Python scoring scripts for behavioural CSV data from neuropsych tasks run in the
 
 Eight tasks are supported:
 
-| Task | What it measures | Example config |
-| --- | --- | --- |
-| **sert** | Suicide Emotion Rigidity Task; per-cue accuracy and switch cost RTs | [`tests/sert_example.json`](tests/sert_example.json) |
-| **pgng** | Parametric Go / No-go / Stop; hit / miss / commission counts and RTs per block | [`tests/pgng_example.json`](tests/pgng_example.json) |
-| **bart** | Balloon Analogue Risk Task; pumps, pops, earnings, post-failure caution | [`tests/bart_example.json`](tests/bart_example.json) |
-| **fept** | Facial Emotion Perception Task; per-emotion / race / sex / animal accuracy and misclassification counts | [`tests/fept_example.json`](tests/fept_example.json) |
-| **synonyms** | Synonym matching; accuracy and RT by correctness | [`tests/synonyms_example.json`](tests/synonyms_example.json) |
-| **fingosc** | Finger Oscillation; mean and SD of tap RT per block (dominant vs non-dominant hand) | [`tests/fingosc_example.json`](tests/fingosc_example.json) (keyboard); also `fingosc_example_touch.json` and `fingosc_example_stacked.json` |
-| **smid** | Social Monetary Incentive Delay; per-condition (self / charity × gain / lose / neither × small / big) probe-response counts and RTs, with the participant's charity & rep carried through | [`tests/smid_example.json`](tests/smid_example.json) |
-| **stroop** | Classic + emotional Stroop (alternating blocks); per `test × condition` n-trials / accuracy / RTs, plus Stroop-interference contrast scores | [`tests/stroop_example.json`](tests/stroop_example.json) (keyboard); also `stroop_example_touch.json` |
+| Task | What it measures | Example config | Output columns |
+| --- | --- | --- | --- |
+| **sert** | Suicide Emotion Rigidity Task; per-cue accuracy and switch cost RTs | [`tests/sert_example.json`](tests/sert_example.json) | [data dictionary](docs/data_dictionary_sert.md) |
+| **pgng** | Parametric Go / No-go / Stop; hit / miss / commission counts and RTs per block | [`tests/pgng_example.json`](tests/pgng_example.json) | [data dictionary](docs/data_dictionary_pgng.md) |
+| **bart** | Balloon Analogue Risk Task; pumps, pops, earnings, post-failure caution | [`tests/bart_example.json`](tests/bart_example.json) | [data dictionary](docs/data_dictionary_bart.md) |
+| **fept** | Facial Emotion Perception Task; per-emotion / race / sex / animal accuracy and misclassification counts | [`tests/fept_example.json`](tests/fept_example.json) | [data dictionary](docs/data_dictionary_fept.md) |
+| **synonyms** | Synonym matching; accuracy and RT by correctness | [`tests/synonyms_example.json`](tests/synonyms_example.json) | [data dictionary](docs/data_dictionary_synonyms.md) |
+| **fingosc** | Finger Oscillation; mean and SD of tap RT per block (dominant vs non-dominant hand) | [`tests/fingosc_example.json`](tests/fingosc_example.json) (keyboard); also `fingosc_example_touch.json` and `fingosc_example_stacked.json` | [data dictionary](docs/data_dictionary_fingosc.md) |
+| **smid** | Social Monetary Incentive Delay; per-condition (self / charity × gain / lose / neither × small / big) probe-response counts and RTs, with the participant's charity & rep carried through | [`tests/smid_example.json`](tests/smid_example.json) | [data dictionary](docs/data_dictionary_smid.md) |
+| **stroop** | Classic + emotional Stroop (alternating blocks); per `test × condition` n-trials / accuracy / RTs, plus Stroop-interference contrast scores | [`tests/stroop_example.json`](tests/stroop_example.json) (keyboard); also `stroop_example_touch.json` | [data dictionary](docs/data_dictionary_stroop.md) |
 
 ## Requirements
 
@@ -76,6 +76,8 @@ Each run writes (at most) two CSVs into `out/`:
 - `<exp_name>_n<N>_scores_<timestamp>.csv` — one row per input file, with aggregated scores.
 
 `<exp_name>` is read from the `exp_name` metacol of the first input. `<N>` is the count of unique participant IDs. `<timestamp>` is `YYYYMMDDhhmmss` of the run.
+
+For a column-by-column description of every output file, see the per-task **data dictionaries** linked in the table above.
 
 A log file `log_<timestamp>.log` is also written into `out/`.
 
