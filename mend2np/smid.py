@@ -39,7 +39,7 @@ from mend2np.utils import (
     copy_configured_columns,
 )
 
-logger = logging.getLogger('root')
+logger = logging.getLogger(__name__)
 
 REQUIRED_PARAMS = {
     'metacols': dict,
@@ -52,7 +52,7 @@ REQUIRED_PARAMS = {
 # ---------------------------------------------------------------------------
 
 def smid(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='',
-         formatted:bool=False, log=20, trial_filter:str='') -> tuple:
+         formatted:bool=False, log=20, logfile:bool=False, trial_filter:str='') -> tuple:
     """Score one or more SMID data files.
 
     :param params: configuration dict. Must include `metacols` and `blocks`.
@@ -62,10 +62,11 @@ def smid(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list=''
     :param filelist: list of CSV paths, path to a file-of-paths, or empty (GUI picker).
     :param formatted: True if data are already tidy with standard column names.
     :param log: log level.
+    :param logfile: if True, write a timestamped ``log_<ts>.log`` to ``out`` (default False).
     :param trial_filter: optional pandas query string applied before scoring.
     :returns: `(combined_scores, combined_trials)`.
     """
-    setup_logger(name='root', out=out, level=log).info('start')
+    setup_logger(out=out, level=log, logfile=logfile).info('start')
     validate_params(params, REQUIRED_PARAMS)
 
     def process_one(filepath, params, logger):

@@ -27,7 +27,7 @@ REQUIRED_PARAMS = {
 
 
 def fept(params:dict, formatted:bool=False, out:str=os.getcwd(), write:bool=True, filelist:str|list='',
-         log:int|str=20, ind:bool=False):
+         log:int|str=20, logfile:bool=False, ind:bool=False):
     """Score one or more FEPT data files.
 
     :param params: configuration dict (see `tests/example_driver_fept.py`).
@@ -36,10 +36,11 @@ def fept(params:dict, formatted:bool=False, out:str=os.getcwd(), write:bool=True
     :param write: if True, write combined trials + scores CSVs.
     :param filelist: list of CSV paths, path to a text file with one CSV per line, or empty for GUI picker.
     :param log: log level.
+    :param logfile: if True, write a timestamped ``log_<ts>.log`` to ``out`` (default False).
     :param ind: if True, also write a per-file CSV for each input.
     :returns: (combined_scores, combined_trials).
     """
-    setup_logger(name='root', out=out, level=log).info('start')
+    setup_logger(out=out, level=log, logfile=logfile).info('start')
     validate_params(params, REQUIRED_PARAMS)
 
     def process_one(filepath, params, logger):

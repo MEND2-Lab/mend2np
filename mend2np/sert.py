@@ -63,7 +63,7 @@ _SWITCH_COST_METRICS = (
 )
 
 
-def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20,
+def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20, logfile:bool=False,
          trial_filter:str='') -> tuple:
     """Score one or more SERT data files.
 
@@ -73,10 +73,11 @@ def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list=''
     :param filelist: list of CSV paths, path to a text file with one CSV per line, or empty for GUI picker.
     :param formatted: True if the input is already tidy with standard column names.
     :param log: log level.
+    :param logfile: if True, write a timestamped ``log_<ts>.log`` to ``out`` (default False).
     :param trial_filter: optional pandas query string to subset trials before scoring.
     :returns: (combined_scores, combined_trials).
     """
-    setup_logger(name='root', out=out, level=log).info('start')
+    setup_logger(out=out, level=log, logfile=logfile).info('start')
     validate_params(params, REQUIRED_PARAMS)
 
     def process_one(filepath, params, logger):

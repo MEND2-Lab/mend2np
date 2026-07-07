@@ -35,8 +35,8 @@ Each task module follows the same skeleton:
 ```python
 REQUIRED_PARAMS = { ... }  # schema for validate_params
 
-def task_name(params, out, write, filelist, formatted, log, ...):
-    setup_logger(name='root', out=out, level=log).info('start')
+def task_name(params, out, write, filelist, formatted, log, logfile, ...):
+    setup_logger(out=out, level=log, logfile=logfile).info('start')
     validate_params(params, REQUIRED_PARAMS)
 
     def process_one(filepath, params, logger):
@@ -86,6 +86,6 @@ Then describe the diff in the commit message so future-you knows why the baselin
 
 - **No mutation of input dataframes.** `process_one` callables receive a fresh `df = pd.read_csv(...)`; subsequent transforms should `df = transform(df)` rather than `df.method(inplace=True)`.
 - **Row-by-row iteration is OK when the state is sequential** (the PGNG response classifiers genuinely need prior-row state). Otherwise prefer `.apply` on whole Series, or boolean-mask assignments. Never use `df.at[i, col] = value` inside `iterrows()` — it triggers SettingWithCopyWarning whenever the caller passes a slice.
-- **Module-level `logger = logging.getLogger('root')`** so helper functions in the module can use `logger.warning(...)` without a `global` declaration. `setup_logger` configures the same root logger by name.
+- **Module-level `logger = logging.getLogger(__name__)`** so helper functions in the module can use `logger.warning(...)` without a `global` declaration. This is a child of the package `mend2np` logger that `setup_logger` configures — the library never touches the root logger.
 - **Schemas only need to cover the top-level structural keys** (`metacols`, `cols`, `blocks`). Per-key validation deeper than that is more trouble than it's worth — the column-existence checks in `format_df` cover the rest gracefully.
 - **`_`-prefixed keys in JSON configs are skipped.** Use `"_comment": "..."` to annotate sections without breaking the scoring code.
