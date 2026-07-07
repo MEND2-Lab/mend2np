@@ -16,4 +16,5 @@ filelist = [
 with open(HERE / 'sert_example.json', 'r') as f:
     params = json.load(f)
 
-sert(params=params, formatted=False, out=str(out_dir), filelist=filelist)
+# The Pavlovia SERT runs fixed switch/repeat blocks, so opt into block-level scoring.
+sert(params=params, formatted=False, out=str(out_dir), filelist=filelist, block_switch_rep=True)
