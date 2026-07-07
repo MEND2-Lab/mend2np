@@ -24,7 +24,7 @@ REQUIRED_PARAMS = {
 }
 
 
-def bart(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20,
+def bart(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20, logfile:bool=False,
          trial_filter:str='') -> tuple:
     """Score one or more BART data files.
 
@@ -34,10 +34,11 @@ def bart(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list=''
     :param filelist: list of CSV paths, path to a text file with one CSV path per line, or empty for GUI picker.
     :param formatted: True if the input is already in tidy form with standard column names; default False.
     :param log: log level (numeric or string).
+    :param logfile: if True, write a timestamped ``log_<ts>.log`` to ``out`` (default False).
     :param trial_filter: optional value of `trial_type` to restrict scoring to.
     :returns: (combined_scores, combined_trials).
     """
-    setup_logger(name='root', out=out, level=log).info('start')
+    setup_logger(out=out, level=log, logfile=logfile).info('start')
     validate_params(params, REQUIRED_PARAMS)
 
     def process_one(filepath, params, logger):

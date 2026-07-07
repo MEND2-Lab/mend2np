@@ -2,7 +2,7 @@
 Shared utilities used by every task module.
 
 Contents:
-- setup_logger          — configure the root logger with stream + file handlers
+- setup_logger          — configure the package 'mend2np' logger (stream + file handlers)
 - select_files          — tkinter GUI fallback when no `filelist` is supplied
 - parse_files           — extract the participant-ID prefix from a filename
 - write_out             — write a trials or scores dataframe to a timestamped CSV/TSV
@@ -25,37 +25,54 @@ from tkinter import filedialog as fd
 from ast import literal_eval
 
 
-def setup_logger(name:str='root', out:str='out', level:int|str=20) -> logging.Logger:
-    """Configure (or re-configure) a logger that writes to both stdout and a log file.
+def setup_logger(name:str='mend2np', out:str='out', level:int|str=20, logfile:bool=False) -> logging.Logger:
+    """Configure (or re-configure) the mend2np logger with a stream (and optional file) handler.
+
+    Configures the package's *own* named logger (``'mend2np'`` by default) rather
+    than the root logger, and sets ``propagate=False`` so records never reach the
+    root logger. This keeps mend2np from mutating the level or handlers of a host
+    application's root logger — calling a scoring function no longer silently
+    changes the caller's logging configuration. Every task module logs through a
+    ``logging.getLogger(__name__)`` child (e.g. ``'mend2np.bart'``), which inherits
+    this logger's level and propagates up to its handlers.
+
+    A console (stream) handler is always attached. A timestamped
+    ``log_<timestamp>.log`` file is written to ``out`` only when ``logfile=True``,
+    so scoring a batch doesn't drop a log file into the output directory unless
+    the caller asks for one.
 
     The same logger instance is returned on every call — Python's `logging`
     module caches loggers by name. We clear any previously-attached handlers
     first so running two task modules back-to-back in one Python session
     doesn't produce duplicate log lines.
 
-    :param name: logger name (`'root'` is the convention used by every task module).
-    :param out: directory where `log_<timestamp>.log` will be written; created if missing.
+    :param name: logger name to configure; defaults to the package logger ``'mend2np'``.
+    :param out: directory where `log_<timestamp>.log` will be written when ``logfile=True``; created if missing.
     :param level: numeric log level (10=DEBUG, 20=INFO, 30=WARNING) or a string equivalent.
+    :param logfile: if True, also write a timestamped log file to ``out`` (default False).
     """
-    os.makedirs(out, exist_ok=True)
     logger = logging.getLogger(name)
     logger.setLevel(level)
+    # Don't leak mend2np's records into the host application's root logger.
+    logger.propagate = False
     # Clear any handlers from a previous call so repeated invocations in one Python
     # session (e.g. running two task modules back-to-back) don't multiplex log lines.
     if logger.handlers:
         for h in list(logger.handlers):
             logger.removeHandler(h)
             h.close()
-    datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')
     formatter = logging.Formatter(fmt='%(asctime)s : %(levelname)s : %(module)s : %(message)s')
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(level)
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
-    file_handler = logging.FileHandler(os.path.join(out,f'log_{datetime_string}.log'),mode='w')
-    file_handler.setLevel(level)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    if logfile:
+        os.makedirs(out, exist_ok=True)
+        datetime_string = datetime.now().strftime('%Y%m%d_%H%M%S')
+        file_handler = logging.FileHandler(os.path.join(out,f'log_{datetime_string}.log'),mode='w')
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
     return logger
 
 def select_files() -> tuple:
@@ -207,10 +224,10 @@ def run_task(*, params, filelist, out, write, process_file_fn,
 
     Returns `(combined_scores, combined_trials)`. The caller is responsible for
     setting up the logger via `setup_logger` *before* calling this — `run_task`
-    just reads the root logger; it doesn't configure log level itself.
+    just reads the 'mend2np' logger; it doesn't configure log level itself.
     """
     os.makedirs(out, exist_ok=True)
-    logger = logging.getLogger('root')
+    logger = logging.getLogger(__name__)
     filepaths = _resolve_filelist(filelist, logger)
 
     combined_trials = pd.DataFrame()
@@ -290,10 +307,10 @@ def copy_configured_columns(fmtdf:pd.DataFrame, df:pd.DataFrame, config_section:
     :param section_label: dotted path used in the warning message (e.g. `'cols'`,
         `'metacols'`, or `'blocks.1.cols'`).
     :param mask: optional boolean mask applied to `df.loc[mask, csv_col]`.
-    :param logger: defaults to the root logger when omitted.
+    :param logger: defaults to the module logger ('mend2np.utils') when omitted.
     """
     if logger is None:
-        logger = logging.getLogger('root')
+        logger = logging.getLogger(__name__)
     for standard_name, csv_col in config_section.items():
         if isinstance(standard_name, str) and standard_name.startswith('_'):
             continue

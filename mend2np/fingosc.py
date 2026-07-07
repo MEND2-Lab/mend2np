@@ -35,8 +35,8 @@ from mend2np.utils import (
 )
 
 # Module-level logger reference so helper functions can `logger.warning(...)`
-# without a `global` declaration. setup_logger configures the same root logger.
-logger = logging.getLogger('root')
+# without a `global` declaration. setup_logger configures the package 'mend2np' logger.
+logger = logging.getLogger(__name__)
 
 REQUIRED_PARAMS = {
     'metacols': dict,
@@ -45,7 +45,7 @@ REQUIRED_PARAMS = {
 
 
 def fingosc(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='',
-            formatted:bool=False, log=20, trial_filter:str='') -> tuple:
+            formatted:bool=False, log=20, logfile:bool=False, trial_filter:str='') -> tuple:
     """Score one or more Finger Oscillation data files.
 
     :param params: configuration dict. Must include `metacols` (CSV column ↔ metadata
@@ -58,10 +58,11 @@ def fingosc(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list
     :param formatted: True if the input is already tidy with the library's standard
         column names; default False (raw PsychoPy output).
     :param log: log level.
+    :param logfile: if True, write a timestamped ``log_<ts>.log`` to ``out`` (default False).
     :param trial_filter: optional pandas query string applied before scoring.
     :returns: `(combined_scores, combined_trials)`.
     """
-    setup_logger(name='root', out=out, level=log).info('start')
+    setup_logger(out=out, level=log, logfile=logfile).info('start')
     validate_params(params, REQUIRED_PARAMS)
 
     def process_one(filepath, params, logger):

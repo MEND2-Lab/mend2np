@@ -49,7 +49,7 @@ def _get_resp_mapping(params: dict) -> dict:
     """
     mapping = params.get('resp_mapping')
     if mapping is None:
-        logging.getLogger('root').warning(
+        logging.getLogger(__name__).warning(
             "synonyms: no 'resp_mapping' in params; falling back to DEFAULT_RESP_MAPPING. "
             "Adding 'resp_mapping' to your JSON config is recommended so the mapping is explicit per experiment."
         )
@@ -57,7 +57,7 @@ def _get_resp_mapping(params: dict) -> dict:
     return mapping
 
 
-def synonyms(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20,
+def synonyms(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20, logfile:bool=False,
              trial_filter:str='') -> tuple:
     """Score one or more Synonyms data files.
 
@@ -68,10 +68,11 @@ def synonyms(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|lis
     :param filelist: list of CSV paths, path to a text file with one CSV per line, or empty for GUI picker.
     :param formatted: True if the input is already tidy with standard column names.
     :param log: log level.
+    :param logfile: if True, write a timestamped ``log_<ts>.log`` to ``out`` (default False).
     :param trial_filter: optional pandas query string to subset trials before scoring.
     :returns: (combined_scores, combined_trials).
     """
-    setup_logger(name='root', out=out, level=log).info('start')
+    setup_logger(out=out, level=log, logfile=logfile).info('start')
     validate_params(params, REQUIRED_PARAMS)
     resp_mapping = _get_resp_mapping(params)
 

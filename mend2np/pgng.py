@@ -25,10 +25,10 @@ from mend2np.utils import (
     copy_configured_columns,
 )
 
-# Module-level logger reference. `setup_logger` configures the same root logger,
+# Module-level logger reference. `setup_logger` configures the package 'mend2np' logger,
 # so helper functions in this module pick up the configured handlers regardless
 # of which entry function (pgng / sert / etc.) is currently running.
-logger = logging.getLogger('root')
+logger = logging.getLogger(__name__)
 
 # pgng has two run modes with different required JSON shapes:
 #   formatted=False (raw PsychoPy/E-Prime output): needs metacols + blocks
@@ -43,7 +43,7 @@ REQUIRED_PARAMS_FORMATTED = {
 
 
 def pgng(params:dict, formatted:bool=False, out:str=os.getcwd(), write:bool=True,
-         filelist:str|list='', log=20, ind:bool=False, platform:str='psychopy') -> tuple:
+         filelist:str|list='', log=20, logfile:bool=False, ind:bool=False, platform:str='psychopy') -> tuple:
     """Score one or more PGNG data files.
 
     :param params: configuration dict. See `tests/example_driver_pgng.py` for the unformatted shape
@@ -53,11 +53,12 @@ def pgng(params:dict, formatted:bool=False, out:str=os.getcwd(), write:bool=True
     :param write: if True, write combined trials + scores CSVs.
     :param filelist: list of CSV paths, path to a text file with one CSV per line, or empty for GUI picker.
     :param log: log level.
+    :param logfile: if True, write a timestamped ``log_<ts>.log`` to ``out`` (default False).
     :param ind: if True, also write a per-file TSV for each input.
     :param platform: 'psychopy' (default) or 'eprime'.
     :returns: (combined_scores, combined_trials).
     """
-    setup_logger(name='root', out=out, level=log).info('start')
+    setup_logger(out=out, level=log, logfile=logfile).info('start')
     validate_params(params, REQUIRED_PARAMS_FORMATTED if formatted else REQUIRED_PARAMS_UNFORMATTED)
 
     def process_one(filepath, params, logger):
