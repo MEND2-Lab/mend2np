@@ -64,8 +64,15 @@ _SWITCH_COST_METRICS = (
 
 
 def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list='', formatted:bool=False, log=20, logfile:bool=False,
-         trial_filter:str='') -> tuple:
+         trial_filter:str='', block_switch_rep:bool=False) -> tuple:
     """Score one or more SERT data files.
+
+    Trial-level switch/repeat scoring (each trial vs the previous trial's cue
+    within its block) is always produced under ``<event_type>_trial_*`` columns.
+    Block-level switch/repeat scoring (whole-block switch vs repeat, the
+    PsychoPy/Pavlovia design) is opt-in via ``block_switch_rep`` and emits the
+    ``<event_type>_switch/repeat/switch_cost_*`` columns. It's opt-in because
+    sources like MetricWire don't run fixed switch/repeat blocks.
 
     :param params: configuration dict (see `tests/sert_example.json` or `sert_example_touch.json`).
     :param out: output directory.
@@ -75,6 +82,8 @@ def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list=''
     :param log: log level.
     :param logfile: if True, write a timestamped ``log_<ts>.log`` to ``out`` (default False).
     :param trial_filter: optional pandas query string to subset trials before scoring.
+    :param block_switch_rep: if True, also compute block-level switch/repeat scores
+        (requires fixed switch/repeat blocks, as in the Pavlovia SERT).
     :returns: (combined_scores, combined_trials).
     """
     setup_logger(out=out, level=log, logfile=logfile).info('start')
@@ -86,10 +95,14 @@ def sert(params:dict, out:str=os.getcwd(), write:bool=True, filelist:str|list=''
         if not formatted:
             df = format_df(df, params)
         df = parse_choice_columns(df)
-        df = add_switch_rep(df)
+        df = add_blocks(df)
+        df = add_trial_switch_rep(df)
+        if block_switch_rep:
+            df = add_block_switch_rep(df)
         df = parse_responses(df)
         df.insert(1, 'filename', filename)
-        scores_row = pd.concat([get_meta_cols(df, params), score_df(df, trial_filter)], axis=1)
+        scores_row = pd.concat(
+            [get_meta_cols(df, params), score_df(df, trial_filter, block_switch_rep)], axis=1)
         scores_row.insert(1, 'filename', filename)
         return df, scores_row
 
@@ -139,16 +152,47 @@ def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
     return fmtdf
 
 
-def add_switch_rep(df:pd.DataFrame) -> pd.DataFrame:
-    """Add `block`, `block_nunique_cues`, and `block_switch_rep` columns.
+def add_blocks(df:pd.DataFrame) -> pd.DataFrame:
+    """Ensure a `block` column, used to group trials for switch/repeat scoring.
 
-    The SERT runs in fixed 10-trial blocks. A block with more than one distinct
-    `cue` value contains a cue switch and gets labelled `'switch'`; one with a
-    single cue throughout is `'repeat'`. This block-level label is the primary
-    grouping dimension for switch-cost RT contrasts in `score_df`.
+    Uses an existing `block` column when the config maps one (via `cols.block`) —
+    needed when the source already carries a block index or uses a per-block
+    trial counter that resets (e.g. MetricWire). Otherwise derives blocks from a
+    continuous trial counter as fixed 10-trial runs (`trial // 10`), the
+    PsychoPy/Pavlovia default.
     """
-    # Integer-divide trial number by 10 (1-indexed) to derive block.
-    df['block'] = ((df['trial']) // 10) + 1
+    df = df.copy()
+    if 'block' not in df.columns:
+        # Integer-divide the continuous trial number by 10 (1-indexed) to derive block.
+        df['block'] = ((df['trial']) // 10) + 1
+    return df
+
+
+def add_trial_switch_rep(df:pd.DataFrame) -> pd.DataFrame:
+    """Add trial-level `trial_switch_rep`: cue vs the previous trial's cue.
+
+    Within each block (in row order, which is trial order), a trial is `'switch'`
+    when its `cue` differs from the immediately preceding trial's, `'repeat'` when
+    it matches, and `'first'` for the first trial of a block (no predecessor;
+    excluded from switch-cost contrasts). This is the meaningful contrast for
+    designs that switch cues within a run rather than between fixed blocks.
+    """
+    df = df.copy()
+    prev_cue = df.groupby('block')['cue'].shift()
+    df['trial_switch_rep'] = np.where(
+        prev_cue.isna(), 'first',
+        np.where(df['cue'] != prev_cue, 'switch', 'repeat'))
+    return df
+
+
+def add_block_switch_rep(df:pd.DataFrame) -> pd.DataFrame:
+    """Add block-level `block_nunique_cues` and `block_switch_rep` columns.
+
+    A block with more than one distinct `cue` value contains a cue switch and is
+    labelled `'switch'`; one with a single cue throughout is `'repeat'`. This is
+    the fixed-block design used by the Pavlovia SERT.
+    """
+    df = df.copy()
     # `transform('nunique')` broadcasts the per-block unique cue count back onto every row.
     df['block_nunique_cues'] = df.groupby('block')['cue'].transform('nunique')
     df['block_switch_rep'] = np.where(df['block_nunique_cues'] > 1, 'switch', 'repeat')
@@ -345,20 +389,52 @@ def _bucket_metrics(score_dict: dict, prefix: str, group: pd.DataFrame) -> None:
     score_dict[f'{prefix}_std_correct_resp_rt'] = correct_only.std()
 
 
-def score_df(df:pd.DataFrame, trial_filter:str) -> pd.DataFrame:
+def _score_switch_rep(score_dict:dict, event_type, event_group:pd.DataFrame,
+                      sr_col:str, tag:str) -> None:
+    """Write the switch/repeat × cue bucket metrics + switch-cost diffs.
+
+    `sr_col` is the switch/repeat column to group on (`trial_switch_rep` or
+    `block_switch_rep`). `tag` is inserted into the column prefix so trial- and
+    block-level results don't collide: block-level uses ``tag=''`` (yielding the
+    original ``<event_type>_switch/repeat/switch_cost_*`` names) and trial-level
+    uses ``tag='trial_'``. Switch cost is computed for the `switch` and `repeat`
+    labels only (a trial-level `first` group, if present, is ignored here).
+    """
+    base = f'{event_type}_{tag}'
+    for switch_rep, switch_rep_group in event_group.groupby(sr_col):
+        # The trial-level 'first' label (first trial of a block, no predecessor)
+        # is neither switch nor repeat — exclude it from the switch/repeat grid.
+        if switch_rep == 'first':
+            continue
+        _bucket_metrics(score_dict, f'{base}{switch_rep}', switch_rep_group)
+        for cue, cue_group in switch_rep_group.groupby('cue'):
+            _bucket_metrics(score_dict, f'{base}{switch_rep}_{cue}', cue_group)
+
+    # Switch-cost differences: switch minus repeat, for each (cue, metric).
+    for cue_label in _SWITCH_COST_CUES:
+        cue_suffix = f'_{cue_label}' if cue_label else ''
+        for metric in _SWITCH_COST_METRICS:
+            safe_diff(
+                score_dict,
+                f'{base}switch_cost{cue_suffix}_{metric}',
+                f'{base}switch{cue_suffix}_{metric}',
+                f'{base}repeat{cue_suffix}_{metric}',
+            )
+
+
+def score_df(df:pd.DataFrame, trial_filter:str, block_switch_rep:bool=False) -> pd.DataFrame:
     """Build a 1-row dataframe of per-file SERT scores.
 
-    Walks three nested groupings:
-      1. By `event_type` (the experiment-defined trial categorization).
-      2. By `block_switch_rep` (`switch` vs `repeat` block).
-      3. By `cue` (the within-trial cue value, e.g. color/shape/lethality).
-    `_bucket_metrics` is called at every level so the output has metrics at
-    every grain. After the per-bucket metrics are written, switch-cost
-    differences (`switch - repeat`) are computed for each `(cue, metric)`
-    combination via `safe_diff`.
+    For each `event_type`, writes overall bucket metrics, then the trial-level
+    switch/repeat × cue grid (always, under ``<event_type>_trial_*``) and, when
+    `block_switch_rep` is True, the block-level grid (under the original
+    ``<event_type>_switch/repeat/switch_cost_*`` names). `_bucket_metrics` is
+    called at every grain; switch-cost differences are `switch - repeat`.
 
-    :param df: the per-trial dataframe (already populated by parse_responses + add_switch_rep).
+    :param df: per-trial dataframe (populated by parse_responses, add_blocks,
+        add_trial_switch_rep, and — when block-level is requested — add_block_switch_rep).
     :param trial_filter: optional pandas query string applied before scoring.
+    :param block_switch_rep: if True, also emit the block-level switch/repeat grid.
     """
     score_dict = {}
 
@@ -366,24 +442,9 @@ def score_df(df:pd.DataFrame, trial_filter:str) -> pd.DataFrame:
         df = df.query(trial_filter)
 
     for event_type, event_group in df.groupby('event_type'):
-
         _bucket_metrics(score_dict, str(event_type), event_group)
-
-        for switch_rep, switch_rep_group in event_group.groupby('block_switch_rep'):
-            _bucket_metrics(score_dict, f'{event_type}_{switch_rep}', switch_rep_group)
-
-            for cue, cue_group in switch_rep_group.groupby('cue'):
-                _bucket_metrics(score_dict, f'{event_type}_{switch_rep}_{cue}', cue_group)
-
-        # Switch-cost differences: switch minus repeat, for each (cue, metric) combination.
-        for cue_label in _SWITCH_COST_CUES:
-            cue_suffix = f'_{cue_label}' if cue_label else ''
-            for metric in _SWITCH_COST_METRICS:
-                safe_diff(
-                    score_dict,
-                    f'{event_type}_switch_cost{cue_suffix}_{metric}',
-                    f'{event_type}_switch{cue_suffix}_{metric}',
-                    f'{event_type}_repeat{cue_suffix}_{metric}',
-                )
+        _score_switch_rep(score_dict, event_type, event_group, 'trial_switch_rep', 'trial_')
+        if block_switch_rep:
+            _score_switch_rep(score_dict, event_type, event_group, 'block_switch_rep', '')
 
     return pd.DataFrame(score_dict, index=[0])
