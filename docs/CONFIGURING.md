@@ -123,14 +123,17 @@ In the tables: **REQ** = the scoring code fails or silently produces nothing wit
 | --- | --- | --- |
 | `metacols.id` | OPT but recommended | Participant ID; also the basis of `nN` in the output filename |
 | `metacols.session`, `datetime`, `exp_name`, `software_version`, `framerate`, `os` | OPT | Carried into trials + scores output |
-| `cols.trial` | **REQ** | Used to mask off non-trial rows; without it `format_df` raises `KeyError` |
+| `cols.trial` | **REQ** | Used to mask off non-trial rows; without it `format_df` raises `KeyError`. Also derives `block` (`trial // 10 + 1`) when `cols.block` is absent |
 | `cols.response` | **REQ for scores** | Source of `first_response`, `last_response`, `correct` |
 | `cols.rt` | **REQ for scores** | Source of `first_response_rt`, `last_response_rt`, `correct_resp_rt` |
 | `cols.correct_resp` | **REQ for scores** | Source of `correct` flag and `correct_resp_index` |
 | `cols.event_type` | **REQ for scores** | Primary `groupby` key in `score_df` — missing it leaves the scores file with only metadata |
-| `cols.cue` | **REQ for scores** | Drives `block_switch_rep` and per-cue scores |
+| `cols.cue` | **REQ for scores** | Drives trial- and block-level switch/repeat and per-cue scores |
+| `cols.block` | OPT | A source-provided block index; used instead of `trial // 10` when present (e.g. when the trial counter resets per block) |
 | `cols.left_choice`, `middle_choice`, `right_choice` | OPT | Each gets expanded into `_class`/`_type`/`_color`/`_shape` derived columns |
 | `cols.stim_onset`, `stim_offset`, `iti_onset`, `iti_offset`, `iti_dur`, `cue_dur`, `stim_with_cue_dur` | OPT | Passed through to trials output for timing analysis |
+
+Trial-level switch/repeat scores (`<event_type>_trial_*`) are always produced. Block-level switch/repeat scores are opt-in via the `block_switch_rep=True` argument to `sert()` — leave it off for sources without fixed switch/repeat blocks (e.g. MetricWire).
 
 ### pgng ([example](../tests/pgng_example.json))
 
