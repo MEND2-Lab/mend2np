@@ -74,6 +74,7 @@ The columns produced depend on block type:
 
 | Suffix | go | gng | gs | Description |
 | --- | :---: | :---: | :---: | --- |
+| `_n_trials` | x | x | x | Total trials in the block — the denominator behind the count columns below. |
 | `_hit` | x | x | x | Count of target hits. |
 | `_om` | x | x | x | Count of target omissions. |
 | `_com` |  | x | x | Count of lure commission errors. |

@@ -52,7 +52,8 @@ One row per input file. Computed in `synonyms.score_df` ([mend2np/synonyms.py](.
 | Column | Type | Description |
 | --- | --- | --- |
 | `num_correct` | int | Total trials where `correct == 1`. |
-| `prop_correct` | float | Mean of `correct` (overall accuracy, 0–1). |
+| `n_trials` | int | Total trials scored (after `trial_filter`) — the denominator behind `prop_correct`. |
+| `prop_correct` | float | `num_correct / n_trials` (overall accuracy, 0–1). Trials with no response score as incorrect, so they count toward the denominator. |
 | `mean_rt` | float | Mean of `rt_last` across all trials (seconds). |
 | `sd_rt` | float | SD of `rt_last` across all trials. |
 | `mean_correct_resp_rt` | float | Mean of `rt_last` restricted to correct trials. |
