@@ -2,7 +2,7 @@
 
 The Suicide Emotion Rigidity Task (SERT) measures cognitive flexibility under emotional content. On each trial three image options are shown plus a *cue* indicating which dimension to attend to (e.g. shape, colour, or lethality). Switch-cost contrasts (switch − repeat differences in RT and accuracy) are the primary outputs, and are computed at two grains:
 
-- **Trial-level** (always produced, `<event_type>_trial_*` columns): a trial is *switch* if its cue differs from the immediately preceding trial's cue within its block, *repeat* if it matches, and *first* for the first trial of a block (no predecessor; excluded from the contrast). Captures the local, trial-to-trial cost of reconfiguring to a new rule.
+- **Trial-level** (always produced, `<event_type>_trial_*` columns): a trial is *switch* if its cue differs from the immediately preceding trial's cue, *repeat* if it matches, and *first* only for the very first trial of the file (no predecessor; excluded from the contrast). Captures the local, trial-to-trial cost of reconfiguring to a new rule. The comparison runs across the whole continuous run and deliberately does **not** reset at `block` boundaries — see the note below.
 - **Block-level** (opt-in via `block_switch_rep=True`, `<event_type>_switch/repeat/switch_cost_*` columns): a whole block is *switch* if the cue changes anywhere within it, *repeat* if every trial shares one cue. Suits designs with fixed switch/repeat blocks (e.g. the Pavlovia SERT's 10-trial blocks); it captures the tonic cost of a mixed-cue context. Off by default because some sources (e.g. MetricWire) don't run fixed blocks, which would collapse every block to *switch*.
 
 Blocks are taken from a configured `cols.block` column when present, otherwise derived as fixed 10-trial runs (`trial // 10 + 1`).
@@ -67,7 +67,13 @@ For each side (`left`, `middle`, `right`), the stimulus filename is parsed into 
 | Column | Type | Description |
 | --- | --- | --- |
 | `block` | float | Block index. Uses `cols.block` when configured, else `(trial // 10) + 1`. |
-| `trial_switch_rep` | str | Trial-level label: `'switch'` if this trial's `cue` differs from the previous trial's cue within the same block, `'repeat'` if it matches, `'first'` for the first trial of a block. Always added. |
+| `trial_switch_rep` | str | Trial-level label: `'switch'` if this trial's `cue` differs from the previous trial's cue, `'repeat'` if it matches, `'first'` for the first trial of the file only. Compared across the whole run, not reset per block. Always added. |
+
+#### Why `trial_switch_rep` ignores block boundaries
+
+When `cols.block` isn't configured, `block` is *derived* as fixed 10-trial runs of a continuous trial counter — it does not correspond to an interruption the participant experiences. Resetting the cue comparison at those synthetic boundaries would label 1 trial in 10 as `'first'` and drop it from every switch-cost contrast for no experimental reason: on the bundled data that was 36 of 360 trials (10%). Comparing across the whole run instead leaves 3 `'first'` trials (one per file) and moves the other 33 into the `switch`/`repeat` buckets where they belong.
+
+If a future data source *does* have real breaks between blocks, this is the assumption to revisit — the fix would be to reset on the genuine boundary via a configured `cols.block`.
 
 ### Derived columns from `add_block_switch_rep` (only when `block_switch_rep=True`)
 
