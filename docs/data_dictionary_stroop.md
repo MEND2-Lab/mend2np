@@ -70,11 +70,19 @@ For each `(test, condition)` bucket. Computed in `stroop.score_df` ([mend2np/str
 | Metric suffix | Type | Description |
 | --- | --- | --- |
 | `_n_trials` | int | Trial count in the bucket. |
-| `_prop_correct` | float | Mean of `correct` in the bucket. |
+| `_n_correct` | float | Count of correct trials in the bucket. |
+| `_n_responses` | int | Count of trials in the bucket where a response was recorded (i.e. `correct` is not NaN). |
+| `_prop_correct` | float | `n_correct / n_trials`. **Non-responses count as incorrect**, matching the synonyms scorer. For accuracy *given a response*, compute `n_correct / n_responses` yourself. |
 | `_mean_rt_correct` | float | Mean of `rt_first` restricted to correct trials. |
 | `_sd_rt_correct` | float | SD of `rt_first` restricted to correct trials. |
 | `_mean_rt_incorrect` | float | Mean of `rt_first` restricted to incorrect trials. |
 | `_sd_rt_incorrect` | float | SD of `rt_first` restricted to incorrect trials. |
+
+#### A note on the `prop_correct` denominator
+
+`correct` is NaN on two kinds of trial: those with **no response**, and those whose `this_color` was **missing from `color_correct_mapping`**. Both now count toward the denominator as incorrect. The second case is a config error rather than participant behaviour, so `stroop.parse_responses` logs a warning naming any unmapped `this_color` or `response` values and their counts — if that warning appears, fix the config before trusting `prop_correct`.
+
+`prop_correct` previously skipped NaN, meaning "accuracy given a response". On the bundled keyboard data (2.4% non-responses) the change lowers values by up to ~0.03; `n_correct` and `n_responses` are emitted so either denominator can be reconstructed.
 
 ### Bucket prefix slots
 
