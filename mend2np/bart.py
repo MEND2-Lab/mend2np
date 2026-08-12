@@ -90,6 +90,14 @@ def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
     fmtdf['rt'] = fmtdf['rt'].apply(_rt_deltas)
 
     fmtdf['popped'] = fmtdf['popped'].astype(bool)
+
+    # PsychoPy keeps the accrued balance in `earnings` even when the balloon
+    # popped, so the raw column overstates what the participant actually banked
+    # (in the bundled example every popped trial carries a non-zero value).
+    # `earnings` is left exactly as logged — the derived column is what the
+    # earnings scores are computed from.
+    if 'earnings' in fmtdf.columns:
+        fmtdf['earnings_banked'] = fmtdf['earnings'].where(~fmtdf['popped'], 0)
     return fmtdf
 
 
@@ -97,6 +105,7 @@ def score_df(df:pd.DataFrame, trial_filter):
     """Build a 1-row dataframe of per-file BART scores.
 
     Columns produced:
+      n_trials                    — total trials scored (after `trial_filter`)
       ntrials_popped              — count of trials where the balloon exploded
       ntrials_unpopped            — count of trials where the participant banked
       popped_ratio                — ntrials_popped / ntrials_unpopped (NaN if no unpopped)
@@ -104,10 +113,14 @@ def score_df(df:pd.DataFrame, trial_filter):
       ptrials_unpopped            — proportion of trials banked
       mean_pumps_popped           — mean pumps on popped trials
       mean_pumps_unpopped         — mean pumps on banked trials
+      mean_rt                     — mean inter-pump latency across all trials
+      sd_rt                       — SD of inter-pump latencies across all trials
+      mean_rt_popped              — mean inter-pump latency across popped trials
+      sd_rt_popped                — SD of inter-pump latencies on popped trials
       mean_rt_unpopped            — mean inter-pump latency across banked trials
       sd_rt_unpopped              — SD of inter-pump latencies on banked trials
-      total_earnings              — sum of `earnings` column
-      mean_earnings               — mean of `earnings` column
+      total_earnings              — sum of `earnings_banked` (popped trials contribute 0)
+      mean_earnings               — mean of `earnings_banked`
       intertrial_variability      — SD(nPumps) / mean(nPumps); a normalised risk measure
       post_failure_mean_pumps     — mean pumps on the trial AFTER a popped trial
       post_failure_mean_rt        — mean inter-pump RT on the trial after a pop
@@ -129,7 +142,12 @@ def score_df(df:pd.DataFrame, trial_filter):
     # pulls each next-row value into the current row's position.
     popped_after_unpopped = df['popped'] & (df['popped'].shift(-1) == False)
 
+    # Score earnings off the banked column (0 on popped trials). Fall back to the
+    # raw column for `formatted=True` inputs that predate `earnings_banked`.
+    earnings = df['earnings_banked'] if 'earnings_banked' in df.columns else df['earnings']
+
     scores = pd.DataFrame({
+        'n_trials': n_total,
         'ntrials_popped': n_popped,
         'ntrials_unpopped': n_unpopped,
         'popped_ratio': popped_ratio,
@@ -137,10 +155,14 @@ def score_df(df:pd.DataFrame, trial_filter):
         'ptrials_unpopped': n_unpopped/n_total if n_total > 0 else np.nan,
         'mean_pumps_popped': df.loc[df['popped'], 'nPumps'].mean(),
         'mean_pumps_unpopped': df.loc[~df['popped'], 'nPumps'].mean(),
+        'mean_rt': df['rt'].explode().mean(),
+        'sd_rt': df['rt'].explode().std(),
+        'mean_rt_popped': df.loc[df['popped'], 'rt'].explode().mean(),
+        'sd_rt_popped': df.loc[df['popped'], 'rt'].explode().std(),
         'mean_rt_unpopped': df.loc[~df['popped'], 'rt'].explode().mean(),
         'sd_rt_unpopped': df.loc[~df['popped'], 'rt'].explode().std(),
-        'total_earnings': df['earnings'].sum(),
-        'mean_earnings': df['earnings'].mean(),
+        'total_earnings': earnings.sum(),
+        'mean_earnings': earnings.mean(),
         'intertrial_variability': df['nPumps'].std() / df['nPumps'].mean(),
         'post_failure_mean_pumps': df.shift(-1).loc[df['popped'], 'nPumps'].mean(),
         'post_failure_mean_rt': df.shift(-1).loc[df['popped'], 'rt'].explode().mean(),
