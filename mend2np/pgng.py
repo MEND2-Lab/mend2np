@@ -635,13 +635,14 @@ def score_go(block:pd.DataFrame):
     """Compute summary scores for a single Go block.
 
     Columns produced (prefix `go_{N}T_` where N is the target count):
-      hit, om (omission), randcom (random commission), hit_rt_mean, hit_rt_sd,
-      pctt (% of targets correctly hit).
+      n_trials, hit, om (omission), randcom (random commission), hit_rt_mean,
+      hit_rt_sd, pctt (% of targets correctly hit).
     """
     stim_count = len(block['stim_targ_names'].head(1).values[0])
     n_hit = len(block.loc[block['resp_class']=='hit'])
     n_targets = len(block.loc[block['stim_class']=='target'])
     block_scores = pd.DataFrame({
+            f'go_{stim_count}T_n_trials':len(block),
             f'go_{stim_count}T_hit':n_hit,
             f'go_{stim_count}T_om':len(block.loc[block['resp_class']=='om']),
             f'go_{stim_count}T_randcom':len(block.loc[block['resp_class']=='randcom']),
@@ -657,7 +658,7 @@ def score_gng(block:pd.DataFrame):
     """Compute summary scores for a single Go/No-go block.
 
     Columns produced (prefix `gng_{N}T_`):
-      hit, om, com (commission), rej (correct rejection), mo (miss-then-omit),
+      n_trials, hit, om, com (commission), rej (correct rejection), mo (miss-then-omit),
       randcom, hit_rt_mean, hit_rt_sd, com_rt_mean, com_rt_sd,
       pctt (% target hits), pcit (% inhibition trials correctly rejected).
     """
@@ -667,6 +668,7 @@ def score_gng(block:pd.DataFrame):
     n_targets = len(block.loc[block['stim_class']=='target'])
     n_lures = len(block.loc[block['stim_class']=='lure'])
     block_scores = pd.DataFrame({
+            f'gng_{stim_count}T_n_trials':len(block),
             f'gng_{stim_count}T_hit':n_hit,
             f'gng_{stim_count}T_om':len(block.loc[block['resp_class']=='om']),
             f'gng_{stim_count}T_com':len(block.loc[block['resp_class']=='com']),
@@ -697,6 +699,7 @@ def score_gs(block:pd.DataFrame):
     n_targets = len(block.loc[block['stim_class']=='target'])
     n_lures = len(block.loc[block['stim_class']=='lure'])
     block_scores = pd.DataFrame({
+            f'gs_{stim_count}T_n_trials':len(block),
             f'gs_{stim_count}T_hit':n_hit,
             f'gs_{stim_count}T_om':len(block.loc[block['resp_class']=='om']),
             f'gs_{stim_count}T_com':len(block.loc[block['resp_class']=='com']),

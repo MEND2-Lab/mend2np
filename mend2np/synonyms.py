@@ -17,6 +17,7 @@ from mend2np.utils import (
     validate_params,
     run_task,
     copy_configured_columns,
+    warn_unmapped_values,
 )
 
 REQUIRED_PARAMS = {
@@ -115,6 +116,19 @@ def format_df(df:pd.DataFrame, params:dict, resp_mapping:dict=DEFAULT_RESP_MAPPI
         if resp_col in fmtdf.columns:
             fmtdf[resp_col] = fmtdf[resp_col].apply(lambda x: handle_multiple_responses(x, slice_index=slice(None)))
 
+    # Check tokens against the mapping before applying it. `resp_mapping` from a
+    # config replaces DEFAULT_RESP_MAPPING wholesale, so a config that lists only
+    # ',' and '.' silently mis-scores every 'comma'/'period' response.
+    if 'response' in fmtdf.columns:
+        raw_tokens:list = []
+        for v in fmtdf['response']:
+            if isinstance(v, list):
+                raw_tokens.extend(v)
+            else:
+                raw_tokens.append(v)
+        warn_unmapped_values(raw_tokens, resp_mapping, 'response', 'synonyms',
+                             logger=logging.getLogger(__name__))
+
     for opt_col in ['response', 'correct_resp']:
         if opt_col in fmtdf.columns:
             fmtdf[opt_col] = fmtdf[opt_col].apply(
@@ -212,6 +226,9 @@ def score_df(df:pd.DataFrame, trial_filter:str) -> pd.DataFrame:
     if trial_filter:
         df = df.query(trial_filter)
 
+    # `n_trials` is the denominator behind prop_correct — emitted so accuracy can
+    # be checked and re-derived without going back to the trials file.
+    score_dict['n_trials'] = len(df)
     score_dict['num_correct'] = df['correct'].sum()
     score_dict['prop_correct'] = df['correct'].mean()
     score_dict['mean_rt'] = df['rt_last'].mean()
