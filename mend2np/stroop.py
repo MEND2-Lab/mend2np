@@ -40,6 +40,7 @@ from mend2np.utils import (
     validate_params,
     run_task,
     copy_configured_columns,
+    warn_unmapped_values,
 )
 
 logger = logging.getLogger(__name__)
@@ -240,6 +241,13 @@ def parse_responses(df:pd.DataFrame, resp_mapping:dict, color_correct_mapping:di
     """
     df = df.copy()
     if 'response' in df.columns:
+        raw_tokens:list = []
+        for v in df['response']:
+            if isinstance(v, list):
+                raw_tokens.extend(v)
+            else:
+                raw_tokens.append(v)
+        warn_unmapped_values(raw_tokens, resp_mapping, 'response', 'stroop', logger=logger)
         resp_lists = df['response'].apply(lambda v: _normalize_resp_list(v, resp_mapping))
     else:
         resp_lists = pd.Series([[]] * len(df), index=df.index)
@@ -261,6 +269,8 @@ def parse_responses(df:pd.DataFrame, resp_mapping:dict, color_correct_mapping:di
     # CSVs in this experiment don't ship an explicit correct-response column for
     # real trials, so this is the only path to a correctness signal.
     if 'this_color' in df.columns and color_correct_mapping:
+        warn_unmapped_values(df['this_color'].tolist(), color_correct_mapping,
+                             'this_color', 'stroop', logger=logger)
         df['correct_opt'] = df['this_color'].map(color_correct_mapping)
     elif 'correct_resp' in df.columns:
         # Future variants might have an explicit column; respect it if so.
@@ -290,7 +300,10 @@ def score_df(df:pd.DataFrame, trial_filter:str) -> pd.DataFrame:
     (congruent / incongruent / neutral / negative / positive). For each bucket:
 
       `<test>_<condition>_n_trials`
-      `<test>_<condition>_prop_correct`
+      `<test>_<condition>_n_correct`
+      `<test>_<condition>_n_responses`
+      `<test>_<condition>_prop_correct`   — n_correct / n_trials (non-responses
+                                            count as incorrect)
       `<test>_<condition>_mean_rt_correct`
       `<test>_<condition>_sd_rt_correct`
       `<test>_<condition>_mean_rt_incorrect`
@@ -320,7 +333,15 @@ def score_df(df:pd.DataFrame, trial_filter:str) -> pd.DataFrame:
         prefix = f'{test}_{cond}'
         score_dict[f'{prefix}_n_trials'] = len(bucket)
         if 'correct' in bucket.columns:
-            score_dict[f'{prefix}_prop_correct'] = bucket['correct'].mean()
+            # `correct` is NaN when the trial has no response (or when `this_color`
+            # wasn't in `color_correct_mapping` — see the warning in parse_responses).
+            # Those trials count toward the denominator as incorrect, matching
+            # synonyms. `n_responses` is emitted so the accuracy-given-a-response
+            # figure stays recoverable: n_correct / n_responses.
+            n_correct = bucket['correct'].sum()
+            score_dict[f'{prefix}_n_correct'] = n_correct
+            score_dict[f'{prefix}_n_responses'] = int(bucket['correct'].notna().sum())
+            score_dict[f'{prefix}_prop_correct'] = n_correct / len(bucket) if len(bucket) > 0 else np.nan
             correct_rt = bucket.loc[bucket['correct'] == 1, 'rt_first'] if 'rt_first' in bucket.columns else pd.Series(dtype=float)
             incorrect_rt = bucket.loc[bucket['correct'] == 0, 'rt_first'] if 'rt_first' in bucket.columns else pd.Series(dtype=float)
             score_dict[f'{prefix}_mean_rt_correct'] = correct_rt.mean()
