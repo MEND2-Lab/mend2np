@@ -171,14 +171,26 @@ def add_blocks(df:pd.DataFrame) -> pd.DataFrame:
 def add_trial_switch_rep(df:pd.DataFrame) -> pd.DataFrame:
     """Add trial-level `trial_switch_rep`: cue vs the previous trial's cue.
 
-    Within each block (in row order, which is trial order), a trial is `'switch'`
-    when its `cue` differs from the immediately preceding trial's, `'repeat'` when
-    it matches, and `'first'` for the first trial of a block (no predecessor;
-    excluded from switch-cost contrasts). This is the meaningful contrast for
-    designs that switch cues within a run rather than between fixed blocks.
+    A trial is `'switch'` when its `cue` differs from the immediately preceding
+    trial's, `'repeat'` when it matches, and `'first'` only for the very first
+    trial of the file (no predecessor; excluded from switch-cost contrasts).
+
+    The comparison deliberately runs across the *whole* run rather than resetting
+    at each `block`. Blocks here are derived as fixed 10-trial runs of a
+    continuous trial counter, not real interruptions in the task — the
+    participant sees no pause at those boundaries, so the trial after one is a
+    genuine switch or repeat relative to the trial before it. Resetting per block
+    would relabel 1 trial in 10 as `'first'` and drop it from every switch-cost
+    contrast for no experimental reason.
+
+    Sorts by `trial` first: `shift()` compares adjacent rows, so it is only
+    correct if row order is trial order. This function is called per file inside
+    `process_one`, so there is no cross-file leakage.
     """
     df = df.copy()
-    prev_cue = df.groupby('block')['cue'].shift()
+    if 'trial' in df.columns:
+        df = df.sort_values('trial', kind='stable')
+    prev_cue = df['cue'].shift()
     df['trial_switch_rep'] = np.where(
         prev_cue.isna(), 'first',
         np.where(df['cue'] != prev_cue, 'switch', 'repeat'))
