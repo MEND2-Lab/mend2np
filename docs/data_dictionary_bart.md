@@ -31,7 +31,8 @@ One row per balloon trial.
 | (shared metadata) | — | See block above. |
 | `nPumps` | float | Number of pumps the participant made on this balloon. Source: `cols.nPumps`. |
 | `popped` | bool | True if the balloon popped (risk realised); False if the participant successfully banked. Source: `cols.popped`, coerced to bool. |
-| `earnings` | float | Money earned on this trial (0 if popped). Source: `cols.earnings`. |
+| `earnings` | float | Money accrued on this trial **exactly as PsychoPy logged it**. Note this is *not* zeroed on popped trials — PsychoPy retains the balance the balloon had reached when it burst, so popped trials carry a non-zero value the participant never actually received. Use `earnings_banked` for anything that sums money. Source: `cols.earnings`. |
+| `earnings_banked` | float | Money the participant actually banked: `earnings` on unpopped trials, `0` on popped trials. Derived in `bart.format_df`; this is what the earnings scores are computed from. |
 | `trial` | float | Trial counter (0-indexed). Source: `cols.trial`. |
 | `rt` | list[float] | Inter-pump latencies in seconds. The raw CSV stores a list of cumulative click timestamps; the scorer converts these to *deltas between successive clicks*, so the first element is the latency from balloon onset to the first pump and subsequent elements are pump-to-pump latencies. Empty list if the participant did not pump. Source: `cols.rt`. |
 
@@ -42,6 +43,7 @@ One row per input file. Computed in `bart.score_df` ([mend2np/bart.py](../mend2n
 | Column | Type | Description |
 | --- | --- | --- |
 | (shared metadata) | — | See block above. |
+| `n_trials` | int | Total trials scored (after `trial_filter`). |
 | `ntrials_popped` | int | Count of trials where the balloon popped. |
 | `ntrials_unpopped` | int | Count of trials where the participant banked successfully. |
 | `popped_ratio` | float | `ntrials_popped / ntrials_unpopped`. NaN when no banked trials. |
@@ -49,10 +51,14 @@ One row per input file. Computed in `bart.score_df` ([mend2np/bart.py](../mend2n
 | `ptrials_unpopped` | float | Proportion of trials banked, 0–1. |
 | `mean_pumps_popped` | float | Mean `nPumps` across popped trials. |
 | `mean_pumps_unpopped` | float | Mean `nPumps` across banked trials. |
+| `mean_rt` | float | Mean inter-pump latency (seconds) across all pumps on all trials. |
+| `sd_rt` | float | Standard deviation of inter-pump latency across all trials. |
+| `mean_rt_popped` | float | Mean inter-pump latency (seconds) across all pumps on popped trials. |
+| `sd_rt_popped` | float | Standard deviation of inter-pump latency on popped trials. |
 | `mean_rt_unpopped` | float | Mean inter-pump latency (seconds) across all pumps on banked trials. |
 | `sd_rt_unpopped` | float | Standard deviation of inter-pump latency on banked trials. |
-| `total_earnings` | float | Sum of `earnings` across all trials. |
-| `mean_earnings` | float | Mean `earnings` across all trials. |
+| `total_earnings` | float | Sum of `earnings_banked` — popped trials contribute 0. **This changed:** it previously summed the raw `earnings` column, which counted money lost to pops. On the bundled example that read 9980 and now reads 7660. |
+| `mean_earnings` | float | Mean `earnings_banked` across all trials. Same correction as `total_earnings`. |
 | `intertrial_variability` | float | `SD(nPumps) / mean(nPumps)` across all trials — a normalised risk-variability measure (coefficient of variation). |
 | `post_failure_mean_pumps` | float | Mean `nPumps` on the trial *immediately following* a popped trial. Indexes post-failure caution. |
 | `post_failure_mean_rt` | float | Mean inter-pump latency on the trial after a pop. |
