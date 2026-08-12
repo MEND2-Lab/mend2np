@@ -9,7 +9,11 @@ benefiting outcomes. Each trial:
      neither, and small ($0.20) / big ($5) / zero amount.
   2. After a delay there is a brief *probe* window. The participant must
      respond during the probe to earn the gain (or avoid the loss). Responding
-     too early "spoils" the trial; not responding misses it.
+     too early "spoils" the trial; not responding misses it. Responses in the
+     routines either side of the probe are captured too — `pre_probe_*` for
+     early responses, `post_probe_*` for late ones — so both failure modes are
+     visible per trial rather than only inferrable from a missing probe RT.
+     Each RT stays on its own routine's clock, as PsychoPy logged it.
   3. The trial is labelled `benefactor=YOURSELF` (non-social) or
      `benefactor=NAME` (social — outcome accrues to the charity the
      participant selected).
@@ -130,6 +134,10 @@ def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
         `amount_label`, and decode `benefactor` into a boolean `social` flag.
       - Compute a `correct` flag — `probe_response` if present, otherwise
         `probe_rt.notna()` (a non-null RT means they responded in the window).
+      - Derive `pre_probe_response` / `post_probe_response` flags marking early
+        and late responses, from the corresponding key column (or RT column).
+      - Compute `probe_duration_realized` from the routine onsets. Every RT is
+        left on its own routine's clock, exactly as logged.
       - Broadcast `metavars` (e.g. `phase: 'practice'`) and the per-participant
         metacols onto every row, and stamp the block key as `block`.
     Returns the concatenated per-block dataframes.
@@ -164,17 +172,37 @@ def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
 
         # Parse list-string cells. The RT/key response columns are usually written
         # as PsychoPy list-reprs like `[0.43]` even though there's only one entry.
-        for resp_col in ('probe_key', 'probe_rt', 'pre_key', 'post_probe_key'):
+        for resp_col in ('probe_key', 'probe_rt', 'pre_probe_key', 'pre_probe_rt',
+                         'post_probe_key', 'post_probe_rt'):
             if resp_col in tmpdf.columns:
                 tmpdf[resp_col] = tmpdf[resp_col].apply(
                     lambda x: handle_multiple_responses(x, slice_index=0)
                 )
 
-        # Coerce probe_rt to numeric. `handle_multiple_responses` returns the first
+        # Coerce the RTs to numeric. `handle_multiple_responses` returns the first
         # element of the list; for empty `[]` it returns the empty list (a non-numeric
         # value), so `to_numeric(errors='coerce')` cleans those to NaN.
-        if 'probe_rt' in tmpdf.columns:
-            tmpdf['probe_rt'] = pd.to_numeric(tmpdf['probe_rt'], errors='coerce')
+        for rt_col in ('probe_rt', 'pre_probe_rt', 'post_probe_rt'):
+            if rt_col in tmpdf.columns:
+                tmpdf[rt_col] = pd.to_numeric(tmpdf[rt_col], errors='coerce')
+
+        # How long the probe routine actually ran, as opposed to the
+        # `probe_duration` the experiment requested. On trials with no in-window
+        # response the two agree to within a frame; on trials *with* one the
+        # response changes when the routine ends, so this runs past `probe_rt` by
+        # a variable margin and usually falls short of the requested duration.
+        # It is also the only probe-duration measure available for practice
+        # trials, which have no requested-duration column in the export.
+        if {'probe_onset', 'post_probe_onset'}.issubset(tmpdf.columns):
+            tmpdf['probe_duration_realized'] = tmpdf['post_probe_onset'] - tmpdf['probe_onset']
+
+        # All three RTs are left exactly as PsychoPy logged them — each relative to
+        # its own routine's onset (delay, probe, jitter), never silently rebased
+        # onto a common clock. Preserving the logged variable keeps the output
+        # unsurprising for anyone cross-checking it against the raw CSV. The
+        # onsets and `probe_duration_realized` are emitted alongside, so a caller
+        # who wants a common timeline can build one explicitly — e.g. probe-onset-
+        # relative late responses are `post_probe_rt + probe_duration_realized`.
 
         # Decode the prime image into reward_type / amount / amount_label.
         if 'prime' in tmpdf.columns:
@@ -203,6 +231,18 @@ def format_df(df:pd.DataFrame, params:dict) -> pd.DataFrame:
             tmpdf['correct'] = tmpdf['probe_rt'].notna()
         elif 'feedback_correct' in tmpdf.columns:
             tmpdf['correct'] = tmpdf['feedback_correct'].notna()
+
+        # Did the participant respond outside the probe window? PsychoPy ships an
+        # explicit `probe_response` for the probe routine but nothing equivalent for
+        # the routines either side, so these are derived — key first, since some
+        # exports (e.g. test1_smid.csv) log `.keys` but no `.rt` at all.
+        # These flag *early* (pre-probe, i.e. a spoiled trial) and *late*
+        # (post-probe) responses; they don't feed `correct` or the scores output.
+        for stage in ('pre_probe', 'post_probe'):
+            if f'{stage}_key' in tmpdf.columns:
+                tmpdf[f'{stage}_response'] = tmpdf[f'{stage}_key'].notna()
+            elif f'{stage}_rt' in tmpdf.columns:
+                tmpdf[f'{stage}_response'] = tmpdf[f'{stage}_rt'].notna()
 
         # Static per-block metadata (e.g. phase: 'practice').
         for metavar, value in block_metavars.items():

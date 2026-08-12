@@ -212,7 +212,7 @@ The trial-level output preserves every per-trial condition identifier you listed
 
 ### smid ([example](../tests/smid_example.json))
 
-SMID has two blocks — practice (`p`-prefixed PsychoPy columns) and real (unprefixed). Both share the same `metacols` (including the participant's selected `charity_name` and `staff_name`, which are carried through to both outputs). Per-block columns name the prime image, benefactor, probe key/RT, etc.
+SMID has two blocks — practice (`p`-prefixed PsychoPy columns) and real (unprefixed). Both share the same `metacols` (including the participant's selected `charity_name` and `staff_name`, which are carried through to both outputs). Per-block columns name the prime image, benefactor, probe key/RT, etc. All three routines of a trial get a key + RT mapping — `pre_probe_key`/`pre_probe_rt`, `probe_key`/`probe_rt`, and `post_probe_key`/`post_probe_rt` — so early and late responses land in the trials output alongside the in-window ones. The practice block has no post-probe logger of its own, so its `post_probe_*` entries deliberately point at the real block's columns; the row mask keeps the two blocks separate. `probe_onset` and `post_probe_onset` name the two routine-onset columns, which yield `probe_duration_realized`. Each RT is preserved on its own routine's clock exactly as PsychoPy logged it; the onsets are what let a caller place them on a common timeline explicitly.
 
 | Key | Required? | Drives... |
 | --- | --- | --- |
