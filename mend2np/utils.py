@@ -7,6 +7,7 @@ Contents:
 - parse_files           — extract the participant-ID prefix from a filename
 - write_out             — write a trials or scores dataframe to a timestamped CSV/TSV
 - handle_multiple_responses — parse "[a, b, c]" cells back into Python lists
+- warn_unmapped_values   — warn when tokens are missing from a configured mapping
 - ConfigError           — raised by validate_params on a malformed config
 - _resolve_filelist     — internal: turn the heterogeneous `filelist` arg into a list of paths
 - run_task              — the per-file processing loop shared by every task module
@@ -169,7 +170,12 @@ def handle_multiple_responses(value, slice_index=0):
         # are word-boundary guards that *also* allow `-` to consume a leading minus
         # (which a plain `\b` doesn't — `\b` only matches between a word and non-word
         # char, and `-` is non-word, so `\b-?inf\b` never actually matched `-inf`).
-        s = re.sub(r'(?<!\w)-?(?:nan|inf|null|none)(?!\w)', 'None', s, flags=re.IGNORECASE)
+        # `na` is included for R-style exports: without it a cell like `[NA]`
+        # fails literal_eval and the raw string is handed back instead of a list.
+        # Note the substitution runs over the whole cell including quoted content,
+        # so a genuine `['na']` *response token* would become `['None']` — no task
+        # currently uses 'na' as a response value, but keep that in mind if one does.
+        s = re.sub(r'(?<!\w)-?(?:nan|inf|null|none|na)(?!\w)', 'None', s, flags=re.IGNORECASE)
 
         try:
             eval_value = literal_eval(s)
@@ -187,6 +193,45 @@ def handle_multiple_responses(value, slice_index=0):
             return float('nan') if isinstance(slice_index, int) else eval_value
 
     return value
+
+def warn_unmapped_values(values, mapping:dict, label:str, task:str, *, logger=None) -> None:
+    """Warn when response/stimulus tokens are missing from their configured mapping.
+
+    An unmapped token is not dropped — it flows through as itself, then fails the
+    correctness comparison, so the trial silently scores as *incorrect* with no
+    other signal that the config was incomplete. This is the failure mode that
+    hid `comma`/`period` in a synonyms config: the keys are logged by PsychoPy as
+    words, a config listing only `','` and `'.'` maps neither, and 42% of trials
+    score wrong with nothing in the log. Naming the offending values and their
+    counts turns a silent wrong answer into a visible one.
+
+    Values that are already numbers are skipped — those are option indices that
+    have been mapped already (or read from a CSV that stores them numerically),
+    not tokens awaiting a lookup.
+
+    :param values: iterable of raw tokens to check (flatten response lists first).
+    :param mapping: the mapping the tokens will be looked up in.
+    :param label: name of the field being checked, used in the message (e.g. `'response'`).
+    :param task: task name used to prefix the message (e.g. `'synonyms'`).
+    :param logger: defaults to the module logger ('mend2np.utils') when omitted.
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    unmapped:dict = {}
+    for v in values:
+        if v is None or pd.api.types.is_number(v) or pd.isna(v):
+            continue
+        if v not in mapping:
+            unmapped[v] = unmapped.get(v, 0) + 1
+    if unmapped:
+        summary = ', '.join(f'{k!r} (x{n})' for k, n in
+                            sorted(unmapped.items(), key=lambda kv: -kv[1]))
+        logger.warning(
+            f"{task}: {label} value(s) not in the configured mapping: {summary}. "
+            f"Affected trials will score as incorrect — add these keys to the "
+            f"mapping in your JSON config."
+        )
+
 
 class ConfigError(Exception):
     """Raised when a task's params dict is missing a required section or has the wrong shape."""
