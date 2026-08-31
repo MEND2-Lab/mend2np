@@ -53,13 +53,16 @@ _BUCKET_METRICS = (
 _SWITCH_COST_CUES = ('', 'color', 'shape', 'lethality')
 
 # Subset of bucket metrics that switch-cost differences are computed for.
+# `num_correct` is deliberately excluded: switch and repeat buckets rarely hold the
+# same number of trials (at the trial level a typical run has roughly half as many
+# switch as repeat trials), so a raw count difference mostly measures that imbalance
+# rather than any cost. `accuracy` is the rate-normalized contrast to use instead.
 _SWITCH_COST_METRICS = (
     'mean_first_rt',
     'median_first_rt',
     'mean_correct_resp_rt',
     'median_correct_resp_rt',
     'accuracy',
-    'num_correct',
 )
 
 
